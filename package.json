@@ -18,8 +18,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.{ts,js}\" README.md",
-    "test": "jest",
-    "test:cov": "jest --coverage",
     "lint": "tsc --p tsconfig.json --emitDeclarationOnly",
     "publish-package": "npm run build && npm login && npm publish"
   },
