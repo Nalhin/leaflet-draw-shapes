@@ -1,4 +1,3 @@
-[![Test](https://github.com/Nalhin/factory.io/workflows/leaflet-draw-shapes/badge.svg)](https://github.com/Nalhin/leaflet-draw-shapes/actions)
 [![License](https://img.shields.io/github/license/Nalhin/leaflet-draw-shapes)](https://github.com/Nalhin/leaflet-draw-shapes/blob/master/LICENSE.md)
 [![Downloads](https://img.shields.io/npm/dm/leaflet-draw-shapes)](https://www.npmjs.com/package/leaflet-draw-shapes)
 [![Version](https://img.shields.io/npm/v/leaflet-draw-shapes)](https://www.npmjs.com/package/leaflet-draw-shapes)
