@@ -6,7 +6,7 @@
     "allowJs": true,
     "target": "ES5",
     "sourceMap": true,
-    "outDir": "./dist",
+    "outDir": "./build",
     "baseUrl": "./",
     "incremental": true,
     "esModuleInterop": true,
@@ -18,7 +18,7 @@
   },
   "exclude": [
     "node_modules",
-    "dist"
+    "build"
   ],
   "include": [
     "src",

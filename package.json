@@ -1,42 +1,46 @@
 {
   "name": "leaflet-draw-shapes",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Shape drawing support for Leaflet.js map",
   "keywords": [
     "leaflet",
     "draw",
     "shapes"
   ],
-  "main": "dist/index.js",
-  "typings": "dist/index",
+  "main": "build/index.js",
+  "typings": "build/index",
   "files": [
-    "dist/"
+    "build/"
   ],
   "author": "Krzysztof Olipra",
   "license": "MIT",
-  "repository": "https://github.com/Nalhin/leaflet-draw-shapes",
+  "repository": "https://github.com/Nalhin/leaflet-draw-layer",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.{ts,js}\" README.md",
     "lint": "tsc --p tsconfig.json --emitDeclarationOnly",
-    "publish-package": "npm run build && npm login && npm publish"
+    "publish-package": "npm run build && npm login && npm publish",
+    "start": "parcel example/index.html"
   },
   "dependencies": {
+    "@turf/intersect": "^6.5.0",
     "clipper-lib": "~6.2.1",
+    "concavehull": "^0.1.6",
     "d3-selection": "^3.0.0",
     "d3-shape": "^3.1.0",
-    "@turf/intersect": "^6.5.0",
-    "turf-polygon": "~1.0.3",
-    "concavehull": "^0.1.6"
+    "turf-polygon": "~1.0.3"
   },
   "peerDependencies": {
-    "leaflet": "^1.8.0"
+    "leaflet": "1.8.0"
   },
   "devDependencies": {
     "@types/d3-selection": "^3.0.3",
     "@types/d3-shape": "^3.1.0",
     "@types/leaflet": "1.7.11",
+    "leaflet": "1.8.0",
+    "parcel": "^2.6.2",
     "prettier": "^2.7.1",
+    "process": "^0.11.10",
     "typescript": "4.7.4"
   }
 }

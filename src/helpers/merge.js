@@ -37,7 +37,7 @@ function latLngsToTuple(latLngs) {
 
 function toTurfPolygon(lagLngs) {
   const x = latLngsToTuple(lagLngs);
-  return createPolygon([...x, x[0]])
+  return createPolygon([...x, x[0]]);
 }
 
 /**
@@ -49,7 +49,6 @@ function toTurfPolygon(lagLngs) {
 export default (map, polygons, options) => {
   // Transform a L.LatLng object into a GeoJSON polygon that TurfJS expects to receive.
 
-
   const analysis = polygons.reduce(
     (accum, polygon) => {
       const latLngs = polygon.getLatLngs()[0];
@@ -58,7 +57,7 @@ export default (map, polygons, options) => {
 
       // Determine if the current polygon intersects any of the other polygons currently on the map.
       const intersects = polygons
-        .filter(item => !Object.is(item, polygon))
+        .filter((item) => !Object.is(item, polygon))
         .some((polygon) => {
           return Boolean(
             isIntersecting(turfPolygon, toTurfPolygon(polygon.getLatLngs()[0])),
@@ -88,14 +87,13 @@ export default (map, polygons, options) => {
   analysis.intersectingPolygons.forEach((polygon) => removeFor(map, polygon));
 
   return mergePolygons.flatMap((polygon) => {
-      // Determine if it's an intersecting polygon or not.
-      const latLngs = polygon.map((model) => {
-        return map.layerPointToLatLng(new Point(model.X, model.Y));
-      });
+    // Determine if it's an intersecting polygon or not.
+    const latLngs = polygon.map((model) => {
+      return map.layerPointToLatLng(new Point(model.X, model.Y));
+    });
 
-      // Create the polygon, but this time prevent any merging, otherwise we'll find ourselves
-      // in an infinite loop.
-      return createFor(map, latLngs, options, true);
-    },
-  );
+    // Create the polygon, but this time prevent any merging, otherwise we'll find ourselves
+    // in an infinite loop.
+    return createFor(map, latLngs, options, true);
+  });
 };
