@@ -1,15 +1,14 @@
 import { Point } from 'leaflet';
-import { flatten, identical, complement, compose, head } from 'ramda';
 import { Clipper, PolyFillType } from 'clipper-lib';
 import createPolygon from 'turf-polygon';
-import isIntersecting from 'turf-intersect';
+import isIntersecting from '@turf/intersect';
 import { createFor, removeFor } from './polygon';
 import { latLngsToClipperPoints } from './simplify';
 
 /**
  * @method fillPolygon
  * @param {Object} map
- * @param {Array} polygons
+ * @param {Array} polygon
  * @param {Object} options
  * @return {Array}
  */
@@ -36,6 +35,11 @@ function latLngsToTuple(latLngs) {
   return latLngs.map((model) => [model.lat, model.lng]);
 }
 
+function toTurfPolygon(lagLngs) {
+  const x = latLngsToTuple(lagLngs);
+  return createPolygon([...x, x[0]])
+}
+
 /**
  * @param {Object} map
  * @param {Array} polygons
@@ -44,12 +48,7 @@ function latLngsToTuple(latLngs) {
  */
 export default (map, polygons, options) => {
   // Transform a L.LatLng object into a GeoJSON polygon that TurfJS expects to receive.
-  const toTurfPolygon = compose(
-    createPolygon,
-    (x) => [x],
-    (x) => [...x, head(x)],
-    latLngsToTuple,
-  );
+
 
   const analysis = polygons.reduce(
     (accum, polygon) => {
@@ -59,7 +58,7 @@ export default (map, polygons, options) => {
 
       // Determine if the current polygon intersects any of the other polygons currently on the map.
       const intersects = polygons
-        .filter(complement(identical(polygon)))
+        .filter(item => !Object.is(item, polygon))
         .some((polygon) => {
           return Boolean(
             isIntersecting(turfPolygon, toTurfPolygon(polygon.getLatLngs()[0])),
@@ -88,8 +87,7 @@ export default (map, polygons, options) => {
   // Remove all of the existing polygons that are intersecting another polygon.
   analysis.intersectingPolygons.forEach((polygon) => removeFor(map, polygon));
 
-  return flatten(
-    mergePolygons.map((polygon) => {
+  return mergePolygons.flatMap((polygon) => {
       // Determine if it's an intersecting polygon or not.
       const latLngs = polygon.map((model) => {
         return map.layerPointToLatLng(new Point(model.X, model.Y));
@@ -98,6 +96,6 @@ export default (map, polygons, options) => {
       // Create the polygon, but this time prevent any merging, otherwise we'll find ourselves
       // in an infinite loop.
       return createFor(map, latLngs, options, true);
-    }),
+    },
   );
 };

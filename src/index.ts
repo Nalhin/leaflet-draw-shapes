@@ -1,4 +1,12 @@
-import { FeatureGroup, Point } from 'leaflet';
+import {
+  FeatureGroup,
+  Point,
+  Map,
+  SVG,
+  LatLng,
+  Polygon,
+  LeafletMouseEvent, LatLngLiteral,
+} from 'leaflet';
 import { select } from 'd3-selection';
 import { line, curveMonotoneX } from 'd3-shape';
 import { updateFor } from './helpers/layer';
@@ -22,10 +30,75 @@ import simplifyPolygon from './helpers/simplify';
 export const polygons = new WeakMap();
 
 /**
+ * Option object accepted by the Index constructor
+ */
+export interface DrawLayerOptions {
+  /**
+   * Modifies the default mode.
+   * @default ALL
+   */
+  mode?: number | undefined;
+
+  /**
+   * By how much to smooth the polygons.
+   * @default 0.3
+   */
+  smoothFactor?: number | undefined;
+
+  /**
+   * Factor to determine when to delete or when to append an edge.
+   * @default 10
+   */
+  elbowDistance?: number | undefined;
+
+  /**
+   * By how much to simplify the polygon.
+   * @default 1.1
+   */
+  simplifyFactor?: number | undefined;
+
+  /**
+   * Whether to attempt merging of polygons that intersect.
+   * @default true
+   */
+  mergePolygons?: boolean | undefined;
+
+  /**
+   * Whether to apply the concaving algorithm to the polygons.
+   * @default true
+   */
+  concavePolygon?: boolean | undefined;
+
+  /**
+   * Maximum number of polygons to be added to the map layer.
+   * @default Infinity
+   */
+  maximumPolygons?: number | undefined;
+
+  /**
+   * Whether to defer markers event until after exiting EDIT mode.
+   * @default false
+   */
+  notifyAfterEditExit?: boolean | undefined;
+
+  /**
+   * Whether to exit CREATE mode after each polygon creation.
+   * @default false
+   */
+  leaveModeAfterCreate?: boolean | undefined;
+
+  /**
+   * Size of the stroke when drawing.
+   * @default 2
+   */
+  strokeWidth?: number | undefined;
+}
+
+/**
  * @constant defaultOptions
  * @type {Object}
  */
-export const defaultOptions = {
+export const defaultOptions: DrawLayerOptions = {
   mode: ALL,
   smoothFactor: 0.3,
   elbowDistance: 10,
@@ -69,6 +142,11 @@ export const edgesKey = Symbol('draw-shapes/edges');
 const cancelKey = Symbol('draw-shapes/cancel');
 
 export default class DrawLayer extends FeatureGroup {
+
+  private readonly options: DrawLayerOptions;
+  private map: Map | null = null;
+  private svg: SVG | null = null;
+
   /**
    * @constructor
    * @param {Object} [options = {}]
@@ -84,35 +162,43 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Object} map
    * @return {this}
    */
-  onAdd(map) {
+  public onAdd(map: Map) {
     // Memorise the map instance.
     this.map = map;
 
     // Attach the cancel function and the instance to the map.
-    map[cancelKey] = () => {};
+    //@ts-ignore
+    map[cancelKey] = () => {
+    };
+    //@ts-ignore
     map[instanceKey] = this;
-    map[notifyDeferredKey] = () => {};
+    //@ts-ignore
+    map[notifyDeferredKey] = () => {
+    };
 
     // Setup the dependency injection for simplifying the polygon.
+    //@ts-ignore
     map.simplifyPolygon = simplifyPolygon;
 
     // Add the item to the map.
     polygons.set(map, new Set());
 
     // Set the initial mode.
-    modeFor(map, this.options.mode, this.options);
+    modeFor(map, this.options.mode ?? ALL, this.options);
 
     // Instantiate the SVG layer that sits on top of the map.
-    const svg = (this.svg = select(map._container)
+
+    const svg = (this.svg = select(map.getContainer())
       .append('svg')
-      .classed('free-draw', true)
+      .classed('leaflet-draw-shapes', true)
       .attr('width', '100%')
       .attr('height', '100%')
       .style('pointer-events', 'none')
       .style('z-index', '1001')
-      .style('position', 'relative'));
+      .style('position', 'relative') as unknown as SVG);
 
     // Set the mouse events.
+
     this.listenForEvents(map, svg, this.options);
 
     return this;
@@ -123,16 +209,19 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Object} map
    * @return {this}
    */
-  onRemove(map) {
+  public onRemove(map: Map): this {
     // Remove the item from the map.
     polygons.delete(map);
 
     // Remove the SVG layer.
-    this.svg.remove();
+    this.svg?.remove();
 
     // Remove the appendages from the map container.
+    //@ts-ignore
     delete map[cancelKey];
+    //@ts-ignore
     delete map[instanceKey];
+    //@ts-ignore
     delete map.simplifyPolygon;
     return this;
   }
@@ -143,8 +232,11 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Object} [options = { concavePolygon: false }]
    * @return {Object}
    */
-  create(latLngs, options = { concavePolygon: false }) {
-    const created = createFor(this.map, latLngs, {
+  public create(latLngs: ReadonlyArray<LatLngLiteral>, options = { concavePolygon: false }) {
+    if (!this.map) {
+      return;
+    }
+    const created = createFor(this.map, latLngs as any[], {
       ...this.options,
       ...options,
     });
@@ -156,9 +248,11 @@ export default class DrawLayer extends FeatureGroup {
    * @method remove
    * @return {this}
    */
-  remove() {
+  public remove() {
     super.remove();
-    updateFor(this.map, 'remove');
+    if (this.map) {
+      updateFor(this.map, 'remove');
+    }
     return this;
   }
 
@@ -167,16 +261,21 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Object} polygon
    * @return {void}
    */
-  removePolygon(polygon) {
-    removeFor(this.map, polygon);
-    updateFor(this.map, 'remove');
+  public removePolygon(polygon: Polygon) {
+    if (this.map) {
+      removeFor(this.map, polygon);
+      updateFor(this.map, 'remove');
+    }
   }
 
   /**
    * @method clear
    * @return {void}
    */
-  clear() {
+  public clear() {
+    if (!this.map) {
+      return;
+    }
     clearFor(this.map);
     updateFor(this.map, 'clear');
   }
@@ -186,9 +285,13 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Number} [mode = null]
    * @return {Number}
    */
-  mode(mode = null) {
+  public mode(mode : number | null = null) {
+    if (!this.map) {
+      return;
+    }
     // Set mode when passed `mode` is numeric, and then yield the current mode.
     typeof mode === 'number' && modeFor(this.map, mode, this.options);
+    //@ts-ignore
     return this.map[modesKey];
   }
 
@@ -196,7 +299,10 @@ export default class DrawLayer extends FeatureGroup {
    * @method size
    * @return {Number}
    */
-  size() {
+  public size() {
+    if (!this.map) {
+      return 0;
+    }
     return polygons.get(this.map).size;
   }
 
@@ -204,7 +310,10 @@ export default class DrawLayer extends FeatureGroup {
    * @method all
    * @return {Array}
    */
-  all() {
+  public all() {
+    if (!this.map) {
+      return [];
+    }
     return Array.from(polygons.get(this.map));
   }
 
@@ -212,7 +321,11 @@ export default class DrawLayer extends FeatureGroup {
    * @method cancel
    * @return {void}
    */
-  cancel() {
+  public cancel() {
+    if (!this.map) {
+      return;
+    }
+    //@ts-ignore
     this.map[cancelKey]();
   }
 
@@ -223,13 +336,14 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Object} options
    * @return {void}
    */
-  listenForEvents(map, svg, options) {
+  private listenForEvents(map: Map, svg: SVG, options: DrawLayerOptions) {
     /**
      * @method mouseDown
      * @param {Object} event
      * @return {void}
      */
-    const mouseDown = (event) => {
+    const mouseDown = (event: LeafletMouseEvent) => {
+      //@ts-ignore
       if (!(map[modesKey] & CREATE)) {
         // Polygons can only be created when the mode includes create.
         return;
@@ -246,7 +360,7 @@ export default class DrawLayer extends FeatureGroup {
       const lineIterator = this.createPath(
         svg,
         map.latLngToContainerPoint(event.latlng),
-        options.strokeWidth,
+        options.strokeWidth ?? 2,
       );
 
       /**
@@ -254,7 +368,7 @@ export default class DrawLayer extends FeatureGroup {
        * @param {Object} event
        * @return {void}
        */
-      const mouseMove = (event) => {
+      const mouseMove = (event: LeafletMouseEvent) => {
         // Resolve the pixel point to the latitudinal and longitudinal equivalent.
         const point = map.mouseEventToContainerPoint(event.originalEvent);
 
@@ -266,24 +380,30 @@ export default class DrawLayer extends FeatureGroup {
       };
 
       // Create the path when the user moves their cursor.
+      //@ts-ignore
       map.on('mousemove touchmove', mouseMove);
 
       /**
        * @method mouseUp
+       * @param _ ignored
        * @param {Boolean} [create = true]
        * @return {Function}
        */
-      const mouseUp = (_, create = true) => {
+      const mouseUp = (_: unknown, create = true) => {
         // Remove the ability to invoke `cancel`.
-        map[cancelKey] = () => {};
+        //@ts-ignore
+        map[cancelKey] = () => {
+        };
 
         // Stop listening to the events.
         map.off('mouseup', mouseUp);
         map.off('mousemove', mouseMove);
         'body' in document &&
-          document.body.removeEventListener('mouseleave', mouseUp);
+        document.body.removeEventListener('mouseleave', mouseUp);
 
         // Clear the SVG canvas.
+
+        //@ts-ignore
         svg.selectAll('*').remove();
 
         if (create) {
@@ -295,6 +415,8 @@ export default class DrawLayer extends FeatureGroup {
           updateFor(map, 'create');
 
           // Exit the `CREATE` mode if the options permit it.
+
+          //@ts-ignore
           options.leaveModeAfterCreate && this.mode(this.mode() ^ CREATE);
         }
       };
@@ -302,12 +424,15 @@ export default class DrawLayer extends FeatureGroup {
       // Clear up the events when the user releases the mouse.
       map.on('mouseup touchend', mouseUp);
       'body' in document &&
-        document.body.addEventListener('mouseleave', mouseUp);
+      document.body.addEventListener('mouseleave', mouseUp);
 
       // Setup the function to invoke when `cancel` has been invoked.
+
+      //@ts-ignore
       map[cancelKey] = () => mouseUp({}, false);
     };
 
+    //@ts-ignore
     map.on('mousedown touchstart', mouseDown);
   }
 
@@ -318,21 +443,23 @@ export default class DrawLayer extends FeatureGroup {
    * @param {Number} strokeWidth
    * @return {void}
    */
-  createPath(svg, fromPoint, strokeWidth) {
+  private createPath(svg: SVG, fromPoint: Point, strokeWidth: number) {
     let lastPoint = fromPoint;
 
     const lineFunction = line()
       .curve(curveMonotoneX)
-      .x((d) => d.x)
-      .y((d) => d.y);
+      .x((d: any) => d.x)
+      .y((d: any) => d.y);
 
-    return (toPoint) => {
+    return (toPoint: Point) => {
       const lineData = [lastPoint, toPoint];
       lastPoint = toPoint;
       // Draw SVG line based on the last movement of the mouse's position.
       svg
+        //@ts-ignore
         .append('path')
         .classed('leaflet-line', true)
+        //@ts-ignore
         .attr('d', lineFunction(lineData))
         .attr('fill', 'none')
         .attr('stroke', 'black')
@@ -342,12 +469,12 @@ export default class DrawLayer extends FeatureGroup {
 }
 
 /**
- * @method freeDraw
+ * @method drawLayer
  * @return {Object}
  */
-export const drawLayer = (options) => {
+export function drawLayer(options: DrawLayerOptions) {
   return new DrawLayer(options);
-};
+}
 
 export {
   CREATE,
@@ -359,15 +486,3 @@ export {
   ALL,
 } from './helpers/flags';
 
-if (typeof window !== 'undefined') {
-  // Attach to the `window` as `Index` if it exists, as this would prevent `new Index.default` when
-  // using the web version.
-  window.FreeDraw = DrawShapes;
-  DrawShapes.CREATE = CREATE;
-  DrawShapes.EDIT = EDIT;
-  DrawShapes.DELETE = DELETE;
-  DrawShapes.APPEND = APPEND;
-  DrawShapes.EDIT_APPEND = EDIT_APPEND;
-  DrawShapes.NONE = NONE;
-  DrawShapes.ALL = ALL;
-}
