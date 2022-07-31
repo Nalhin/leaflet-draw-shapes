@@ -1,0 +1,40 @@
+{
+  "name": "leaflet-draw-shapes",
+  "version": "1.0.0",
+  "description": "Shape drawing support for Leaflet.js map",
+  "keywords": [
+    "leaflet",
+    "draw",
+    "shapes"
+  ],
+  "main": "dist/index.js",
+  "typings": "dist/index",
+  "files": [
+    "dist/"
+  ],
+  "author": "Krzysztof Olipra",
+  "license": "MIT",
+  "repository": "https://github.com/Nalhin/leaflet-draw-shapes",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "format": "prettier --write \"src/**/*.{ts,js}\" README.md",
+    "test": "jest",
+    "test:cov": "jest --coverage",
+    "lint": "tsc --p tsconfig.json --emitDeclarationOnly",
+    "publish-package": "npm run build && npm login && npm publish"
+  },
+  "dependencies": {
+    "clipper-lib": "~6.2.1",
+    "turf-intersect": "~3.0.12",
+    "turf-polygon": "~1.0.3"
+  },
+  "peerDependencies": {
+    "leaflet": "^1.8.0",
+    "ramda": "^0.22.1"
+  },
+  "devDependencies": {
+    "prettier": "^2.7.1",
+    "typescript": "4.7.4",
+    "@types/leaflet": "1.7.11"
+  }
+}
