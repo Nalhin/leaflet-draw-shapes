@@ -256,8 +256,9 @@ export class DrawLayer extends FeatureGroup {
    */
   addData(geojson: GeoJSON.GeoJSON | readonly GeoJSON.GeoJSON[]): this {
     return this._batch(() => {
+      let count = polygonsOf(this).length;
       for (const ring of outerRingsOf(geojson)) {
-        if (polygonsOf(this).length >= this.options.maxPolygons) break;
+        if (count++ >= this.options.maxPolygons) break;
         this.addLayer(newPolygon(this._context, ring));
       }
       return this;
@@ -296,11 +297,12 @@ export class DrawLayer extends FeatureGroup {
     context.style = resolveStyle(this.options.style);
 
     const { polygon, vertex } = context.style;
+    const appearance = vertexAppearance(context.style, false);
     for (const shape of polygonsOf(this)) {
       // Leaflet can't change the class of an existing path.
       shape.setStyle({ ...polygon, className: shape.options.className });
       for (const marker of context.vertices.get(shape) ?? []) {
-        marker.setStyle(vertexAppearance(context.style, false));
+        marker.setStyle(appearance);
         if (vertex.radius !== undefined) marker.setRadius(vertex.radius);
       }
     }

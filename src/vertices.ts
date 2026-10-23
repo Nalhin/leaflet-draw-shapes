@@ -13,6 +13,7 @@ import {
   stopMapPropagation,
   type DrawContext,
 } from './context';
+import { boundsOf, type Box, type Path } from './geometry/clip';
 import { hasMode, Mode } from './modes';
 import { createPolygons, mergePolygons } from './polygons';
 import type { ResolvedStyle } from './style';
@@ -89,6 +90,19 @@ interface VertexHit {
 }
 
 /**
+ * A polygon's handles in projected pixels at one zoom level. Unlike container
+ * points these don't change as the map pans, so hit tests can reuse them.
+ */
+interface ProjectedVertices {
+  zoom: number;
+  points: Path;
+  bounds: Box;
+}
+
+/** Projected handle positions, by the polygon's handle list. */
+type ProjectionCache = WeakMap<CircleMarker[], ProjectedVertices>;
+
+/**
  * Lets vertices be hovered and dragged with mouse, pen or touch in `EDIT` mode.
  *
  * Presses are hit-tested against the vertex positions on the map container
@@ -106,6 +120,7 @@ export function enableVertexDragging(
     map.createPane(vertexPane).style.zIndex = '450';
   }
 
+  const projections: ProjectionCache = new WeakMap();
   let hovered: CircleMarker | null = null;
   let endDrag: (() => void) | null = null;
   let releaseClicks: (() => void) | null = null;
@@ -121,7 +136,13 @@ export function enableVertexDragging(
 
   const hitTest = (event: PointerEvent): VertexHit | null =>
     editing() && onMapSurface(map, event.target)
-      ? vertexAt(context, map, map.mouseEventToContainerPoint(event), event)
+      ? vertexAt(
+          context,
+          map,
+          projections,
+          map.mouseEventToContainerPoint(event),
+          event,
+        )
       : null;
 
   const onHover = (event: PointerEvent): void => {
@@ -167,6 +188,7 @@ export function enableVertexDragging(
       if (!moved && point.distanceTo(pressed) < dragThreshold) return;
       moved = true;
       marker.setLatLng(map.containerPointToLatLng(point.add(offset)));
+      projections.delete(markers);
       polygon.setLatLngs(markers.map((vertex) => vertex.getLatLng()));
     };
 
@@ -260,7 +282,8 @@ export function enableVertexDragging(
 function vertexAt(
   context: DrawContext,
   map: Map,
-  point: Point,
+  projections: ProjectionCache,
+  containerPoint: Point,
   { pointerType }: PointerEvent,
 ): VertexHit | null {
   const { radius = 0, weight = 0 } = context.style.vertex;
@@ -270,18 +293,40 @@ function vertexAt(
   );
   let hit: VertexHit | null = null;
 
+  const zoom = map.getZoom();
+  const { x, y } = map
+    .containerPointToLayerPoint(containerPoint)
+    .add(map.getPixelOrigin());
+
   for (const polygon of polygonsOf(context.layer)) {
-    const markers = context.vertices.get(polygon) ?? [];
-    for (const marker of markers) {
-      const distance = map
-        .latLngToContainerPoint(marker.getLatLng())
-        .distanceTo(point);
+    const markers = context.vertices.get(polygon);
+    if (!markers?.length) continue;
+
+    let projected = projections.get(markers);
+    if (projected?.zoom !== zoom) {
+      // Rounded like `map.latLngToContainerPoint()`.
+      const points: Path = markers.map((marker) => {
+        const { x, y } = map.project(marker.getLatLng(), zoom).round();
+        return [x, y];
+      });
+      projected = { zoom, points, bounds: boundsOf(points) };
+      projections.set(markers, projected);
+    }
+
+    // No handle can be nearer than the polygon's bounds.
+    const [minX, minY, maxX, maxY] = projected.bounds;
+    const dx = Math.max(minX - x, 0, x - maxX);
+    const dy = Math.max(minY - y, 0, y - maxY);
+    if (Math.hypot(dx, dy) > nearest) continue;
+
+    projected.points.forEach(([vx, vy], index) => {
+      const distance = Math.hypot(vx - x, vy - y);
       // `<=` so that on a tie the polygon drawn on top wins.
       if (distance <= nearest) {
         nearest = distance;
-        hit = { polygon, marker, markers };
+        hit = { polygon, marker: markers[index]!, markers };
       }
-    }
+    });
   }
   return hit;
 }

@@ -103,6 +103,25 @@ export function union(paths: Path[]): Path[] {
   return outerRings(unionAll([first], ...rest.map((path) => [path])));
 }
 
+/** Axis-aligned bounds of a path, as `[minX, minY, maxX, maxY]`. */
+export type Box = [number, number, number, number];
+
+export function boundsOf(path: Path): Box {
+  const box: Box = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of path) {
+    box[0] = Math.min(box[0], x);
+    box[1] = Math.min(box[1], y);
+    box[2] = Math.max(box[2], x);
+    box[3] = Math.max(box[3], y);
+  }
+  return box;
+}
+
+/** Whether two boxes overlap or touch, a cheap test before {@link intersects}. */
+export function boxesMeet(a: Box, b: Box): boolean {
+  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+}
+
 /** Whether two polygons overlap by a non-zero area. */
 export function intersects(subject: Path, clip: Path): boolean {
   return intersection([subject], [clip]).length > 0;

@@ -15,6 +15,8 @@ import {
   type DrawContext,
 } from './context';
 import {
+  boundsOf,
+  boxesMeet,
   intersects,
   simplify,
   toLatLngs,
@@ -83,12 +85,14 @@ export function createPolygons(
     !preventMutations && options.concaveHull ? concaveHull(latLngs) : latLngs;
 
   const added: Polygon[] = [];
+  let count = polygonsOf(layer).length;
   for (const path of simplify(toPath(map, shape), options.simplifyFactor)) {
-    if (polygonsOf(layer).length >= options.maxPolygons) break;
+    if (count >= options.maxPolygons) break;
 
     const polygon = newPolygon(context, toLatLngs(map, path));
     layer.addLayer(polygon);
     added.push(polygon);
+    count++;
   }
 
   if (!preventMutations && options.mergePolygons && added.length) {
@@ -112,11 +116,20 @@ export function mergePolygons(
   const { layer } = context;
   const polygons = polygonsOf(layer);
   const paths = polygons.map((polygon) => toPath(map, outerRing(polygon)));
+  const boxes = paths.map(boundsOf);
 
-  const overlapping = paths.flatMap((path, index) =>
-    paths.some((other, j) => j !== index && intersects(path, other))
-      ? [index]
-      : [],
+  // Clipping is costly, so only pairs whose bounds meet are tested, each once.
+  const isOverlapping = paths.map(() => false);
+  for (let i = 0; i < paths.length; i++) {
+    for (let j = i + 1; j < paths.length; j++) {
+      if (isOverlapping[i] && isOverlapping[j]) continue;
+      if (boxesMeet(boxes[i]!, boxes[j]!) && intersects(paths[i]!, paths[j]!)) {
+        isOverlapping[i] = isOverlapping[j] = true;
+      }
+    }
+  }
+  const overlapping = paths.flatMap((_, index) =>
+    isOverlapping[index] ? [index] : [],
   );
   if (!overlapping.length) return [];
 

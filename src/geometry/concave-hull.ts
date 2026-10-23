@@ -155,15 +155,14 @@ export function concaveHull<T extends LatLngLiteral>(
   let previous = { x: current.x, y: current.y - 1 };
 
   for (let count = 1; count <= MAX_ITERATIONS; count++) {
-    const byAngle = [...points].sort(
-      (a, b) =>
-        turnAngle(current, previous, b) - turnAngle(current, previous, a),
-    );
-    const next = byAngle.find(
-      (candidate) =>
-        distance(current.latLng, candidate.latLng) < maxDistance &&
-        !crossesHull(hull, candidate),
-    );
+    // Only points within reach can continue the hull, so filter before
+    // sorting. The sort is stable, so the order matches sorting them all.
+    const from = current;
+    const byAngle = points
+      .filter((point) => distance(from.latLng, point.latLng) < maxDistance)
+      .map((point) => ({ point, angle: turnAngle(from, previous, point) }))
+      .sort((a, b) => b.angle - a.angle);
+    const next = byAngle.find(({ point }) => !crossesHull(hull, point))?.point;
 
     // No continuation, or the walk got stuck in place.
     if (!next || next === current) return fallback();
