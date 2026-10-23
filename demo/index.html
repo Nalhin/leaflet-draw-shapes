@@ -62,10 +62,22 @@
           ><input type="checkbox" data-option="leaveModeAfterCreate" /> Leave
           create mode after drawing</label
         >
+        <label
+          >Max shapes
+          <input
+            type="number"
+            id="max-polygons"
+            min="1"
+            step="1"
+            placeholder="∞"
+            inputmode="numeric"
+        /></label>
       </section>
 
       <section class="stats">
-        <span><strong id="count">0</strong> shapes</span>
+        <span
+          ><strong id="count">0</strong><span id="limit"></span> shapes</span
+        >
         <button type="button" id="export">Export GeoJSON</button>
         <button type="button" id="clear" class="danger">Clear</button>
       </section>

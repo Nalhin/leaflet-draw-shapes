@@ -390,6 +390,38 @@ describe('DrawLayer', () => {
       expect(layer.getLayers()).toHaveLength(1);
     });
 
+    it('allows a shape that merges into an existing one at maxPolygons', () => {
+      const { map, layer } = setup({ maxPolygons: 1 });
+      layer.addPolygon(square(map, 300, 300));
+      const merged = layer.addPolygon(square(map, 350, 300));
+
+      expect(merged).toHaveLength(1);
+      expect(layer.getLayers()).toEqual(merged);
+    });
+
+    it('keeps only the merging part of a split shape at maxPolygons', () => {
+      const { map, layer } = setup({ maxPolygons: 1 });
+      layer.addPolygon(square(map, 280, 300));
+      const bowtie = [
+        [300, 200],
+        [500, 400],
+        [500, 200],
+        [300, 400],
+      ].map(([x, y]) => map.containerPointToLatLng(new Point(x!, y!)));
+
+      const [merged] = layer.addPolygon(bowtie);
+      expect(layer.getLayers()).toEqual([merged]);
+      const east = merged!.getBounds().getEast();
+      expect(map.latLngToContainerPoint([0, east]).x).toBeLessThan(450);
+    });
+
+    it('blocks an overlapping shape at maxPolygons without mergePolygons', () => {
+      const { map, layer } = setup({ maxPolygons: 1, mergePolygons: false });
+      layer.addPolygon(square(map, 300, 300));
+      expect(layer.addPolygon(square(map, 350, 300))).toEqual([]);
+      expect(layer.getLayers()).toHaveLength(1);
+    });
+
     it('adds a vertex marker per polygon corner', () => {
       const { map, layer } = setup();
       layer.addPolygon(square(map, 400, 300));
@@ -842,15 +874,13 @@ describe('DrawLayer', () => {
     };
 
     const domClick = (polygon: Polygon, at: Point) =>
-      polygon
-        .getElement()!
-        .dispatchEvent(
-          new MouseEvent('click', {
-            bubbles: true,
-            clientX: at.x,
-            clientY: at.y,
-          }),
-        );
+      polygon.getElement()!.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          clientX: at.x,
+          clientY: at.y,
+        }),
+      );
 
     const ringPoints = (map: Map, polygon: Polygon) =>
       (polygon.getLatLngs()[0] as LatLng[]).map((latLng) =>

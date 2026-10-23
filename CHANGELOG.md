@@ -85,6 +85,8 @@ A full TypeScript rewrite with a modern toolchain, tests and a live demo.
   event.
 - `maximumPolygons` could be exceeded when a self-intersecting stroke split
   into several polygons.
+- At `maxPolygons`, a shape that overlaps an existing one is merged into it
+  instead of being rejected.
 - Leaving `CREATE` mode no longer re-enables dragging on maps created with
   `dragging: false`.
 - The example build failed: Parcel treated `main` as an output target.

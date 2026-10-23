@@ -84,10 +84,13 @@ export function createPolygons(
   const shape =
     !preventMutations && options.concaveHull ? concaveHull(latLngs) : latLngs;
 
+  // A shape that merges into an existing one doesn't add to the count, so when
+  // merging, the limit is applied after the merge instead.
+  const merging = !preventMutations && options.mergePolygons;
   const added: Polygon[] = [];
   let count = polygonsOf(layer).length;
   for (const path of simplify(toPath(map, shape), options.simplifyFactor)) {
-    if (count >= options.maxPolygons) break;
+    if (!merging && count >= options.maxPolygons) break;
 
     const polygon = newPolygon(context, toLatLngs(map, path));
     layer.addLayer(polygon);
@@ -95,9 +98,13 @@ export function createPolygons(
     count++;
   }
 
-  if (!preventMutations && options.mergePolygons && added.length) {
+  if (merging && added.length) {
     const merged = mergePolygons(context, map, options);
-    return [...added.filter((polygon) => layer.hasLayer(polygon)), ...merged];
+    const kept = added.filter((polygon) => layer.hasLayer(polygon));
+    // Drop the new polygons that didn't merge, last first, until under the limit.
+    let excess = polygonsOf(layer).length - options.maxPolygons;
+    while (excess-- > 0 && kept.length) layer.removeLayer(kept.pop()!);
+    return [...kept, ...merged];
   }
 
   return added;
@@ -136,9 +143,14 @@ export function mergePolygons(
   const merged = union(overlapping.map((index) => paths[index]!));
   overlapping.forEach((index) => layer.removeLayer(polygons[index]!));
 
+  // A union never has more polygons than its inputs, so it can't break the
+  // limit, but the layer may be over it while new shapes wait to be trimmed.
+  const unlimited = Object.assign(Object.create(options) as ResolvedOptions, {
+    maxPolygons: Infinity,
+  });
   return merged.flatMap((path) =>
     // Prevent mutations, otherwise creating would trigger another merge.
-    createPolygons(context, map, toLatLngs(map, path), options, true),
+    createPolygons(context, map, toLatLngs(map, path), unlimited, true),
   );
 }
 

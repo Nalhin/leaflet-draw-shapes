@@ -65,6 +65,18 @@ document.querySelectorAll<HTMLInputElement>('[data-option]').forEach((input) =>
   }),
 );
 
+// Read on every draw, so changing it applies to the next shape. Lowering it
+// below the current count keeps existing shapes and blocks new ones.
+const maxInput = $('#max-polygons') as HTMLInputElement;
+maxInput.addEventListener('input', () => {
+  const max = maxInput.valueAsNumber;
+  layer.options.maxPolygons = max >= 1 ? Math.floor(max) : Infinity;
+  $('#limit').textContent =
+    layer.options.maxPolygons === Infinity
+      ? ''
+      : ` / ${layer.options.maxPolygons}`;
+});
+
 $('#clear').addEventListener('click', () => {
   layer.clearLayers();
   log('clear');

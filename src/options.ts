@@ -36,7 +36,8 @@ export interface DrawLayerOptions extends LayerOptions {
   concaveHull?: boolean;
 
   /**
-   * Maximum number of polygons the layer will hold.
+   * Maximum number of polygons the layer will hold. With `mergePolygons`, a
+   * shape that merges into an existing one is still allowed at the limit.
    * @default Infinity
    */
   maxPolygons?: number;

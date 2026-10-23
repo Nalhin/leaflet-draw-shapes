@@ -144,13 +144,29 @@ input[type='checkbox'] {
   accent-color: var(--accent);
 }
 
+input[type='number'] {
+  width: 56px;
+  margin-left: auto;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+input[type='number']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .stats {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.stats span {
+.stats > span {
   margin-right: auto;
   white-space: nowrap;
   color: var(--muted);
