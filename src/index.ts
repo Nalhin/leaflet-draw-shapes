@@ -1,5 +1,3 @@
-import { DrawLayer } from './draw-layer';
-
 export { DrawLayer, drawLayer } from './draw-layer';
 export { defaultOptions, type DrawLayerOptions } from './options';
 export {
@@ -24,5 +22,3 @@ export {
   NONE,
   type Mode,
 } from './modes';
-
-export default DrawLayer;

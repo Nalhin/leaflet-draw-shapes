@@ -20,7 +20,7 @@ import {
   toLatLngs,
   toPath,
   union,
-} from './geometry/clipper';
+} from './geometry/clip';
 import { concaveHull } from './geometry/concave-hull';
 import { APPEND, DELETE, hasMode } from './modes';
 import type { DrawLayerOptions } from './options';
@@ -52,7 +52,6 @@ export function createPolygons(
     const style = layer.resolvedStyle().polygon;
     const polygon = new Polygon(toLatLngs(map, path), {
       ...style,
-      smoothFactor: options.smoothFactor,
       className: ['leaflet-polygon', style.className].filter(Boolean).join(' '),
     });
     layer.addLayer(polygon);

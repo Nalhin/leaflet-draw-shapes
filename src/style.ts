@@ -1,4 +1,4 @@
-import type { CircleMarkerOptions, PathOptions } from 'leaflet';
+import type { CircleMarkerOptions, PolylineOptions } from 'leaflet';
 
 /** Style of the freehand line shown while drawing. */
 export interface StrokeStyle {
@@ -22,8 +22,11 @@ export interface DrawLayerStyle {
    * @default '#3388ff'
    */
   color?: string;
-  /** Leaflet path options for drawn polygons. */
-  polygon?: PathOptions;
+  /**
+   * Leaflet polyline options for drawn polygons (`weight`, `fillOpacity`,
+   * `smoothFactor`, …).
+   */
+  polygon?: PolylineOptions;
   /** Leaflet circle-marker options for the vertex handles shown in `EDIT` mode. */
   vertex?: CircleMarkerOptions;
   /**
@@ -38,7 +41,7 @@ export interface DrawLayerStyle {
 
 /** Concrete options for each element, after defaults and the accent are applied. */
 export interface ResolvedStyle {
-  polygon: PathOptions;
+  polygon: PolylineOptions;
   vertex: CircleMarkerOptions;
   showVertices: 'hover' | 'always';
   stroke: Required<Omit<StrokeStyle, 'dashArray'>> &
@@ -48,7 +51,7 @@ export interface ResolvedStyle {
 export const defaultStyle: Readonly<DrawLayerStyle> = Object.freeze({
   color: '#3388ff',
   showVertices: 'hover',
-  polygon: {},
+  polygon: { smoothFactor: 0.3 },
   vertex: { radius: 5, weight: 2, fillColor: '#fff', fillOpacity: 1 },
   stroke: { width: 2, opacity: 1 },
 });

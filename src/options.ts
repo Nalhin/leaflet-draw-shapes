@@ -11,12 +11,6 @@ export interface DrawLayerOptions extends LayerOptions {
   mode: Mode;
 
   /**
-   * How much Leaflet simplifies the rendered polygon outline.
-   * @default 0.3
-   */
-  smoothFactor: number;
-
-  /**
    * Distance in pixels from an edge within which a click appends a vertex
    * instead of deleting the polygon (when both `DELETE` and `APPEND` are active).
    * @default 10
@@ -64,17 +58,10 @@ export interface DrawLayerOptions extends LayerOptions {
    * @see DrawLayerStyle
    */
   style?: DrawLayerStyle;
-
-  /**
-   * Width in pixels of the freehand stroke shown while drawing.
-   * @deprecated Use `style.stroke.width`.
-   */
-  strokeWidth?: number;
 }
 
 export const defaultOptions: Readonly<DrawLayerOptions> = Object.freeze({
   mode: ALL,
-  smoothFactor: 0.3,
   elbowDistance: 10,
   simplifyFactor: 1.1,
   mergePolygons: true,

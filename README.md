@@ -25,7 +25,7 @@ Sketch shapes with a mouse, pen or finger. Overlapping shapes merge, vertices dr
 - 🗺️ **A real Leaflet layer.** `DrawLayer` is a `FeatureGroup`, so `toGeoJSON()`, `getBounds()` and `getLayers()` just work.
 - 🎨 **One-line theming.** No CSS to import. A single `color` themes shapes, handles and the stroke, and a typed `style` object handles the rest, live.
 - 🦺 **TypeScript-first.** Strictly typed, including typed event listeners.
-- 📦 **Light.** About 6 kB gzipped, ships ESM and CJS, and depends only on `clipper-lib`.
+- 📦 **Light.** About 14 kB gzipped including its single dependency, [`polygon-clipping`](https://github.com/mfogel/polygon-clipping). Ships ESM and CJS.
 
 ## Install
 
@@ -234,7 +234,7 @@ Releases are published from GitHub Releases. See [CONTRIBUTING.md](CONTRIBUTING.
 
 ## Credits
 
-Based on [Leaflet.FreeDraw](https://github.com/Wildhoney/Leaflet.FreeDraw) by Adam Timberlake, including a TypeScript port of his [ConcaveHull](https://github.com/Wildhoney/ConcaveHull). Polygon operations use [Clipper](https://sourceforge.net/projects/jsclipper/).
+Based on [Leaflet.FreeDraw](https://github.com/Wildhoney/Leaflet.FreeDraw) by Adam Timberlake, including a TypeScript port of his [ConcaveHull](https://github.com/Wildhoney/ConcaveHull). Polygon operations use [polygon-clipping](https://github.com/mfogel/polygon-clipping).
 
 ## License
 

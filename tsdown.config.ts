@@ -8,7 +8,6 @@ const config: UserConfig = defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  outputOptions: { exports: 'named' },
   publint: true,
   attw: { profile: 'node16', level: 'error' },
 });

@@ -1,6 +1,6 @@
 import { CircleMarker, Point, Polygon, type LatLng } from 'leaflet';
 import { describe, expect, it, vi } from 'vitest';
-import DefaultExport, {
+import {
   ALL,
   APPEND,
   CREATE,
@@ -39,9 +39,8 @@ describe('DrawLayer', () => {
       });
     });
 
-    it('exposes a factory and a default export', () => {
+    it('exposes a factory', () => {
       expect(drawLayer()).toBeInstanceOf(DrawLayer);
-      expect(DefaultExport).toBe(DrawLayer);
     });
 
     it('is a no-op before being added to a map', () => {
@@ -84,7 +83,10 @@ describe('DrawLayer', () => {
       const { map, layer } = setup({ mode: ALL });
       layer.create(square(map, 400, 300));
 
-      expect(layer.all()[0]!.options.color).toBe('#3388ff');
+      expect(layer.all()[0]!.options).toMatchObject({
+        color: '#3388ff',
+        smoothFactor: 0.3,
+      });
       expect(vertexMarkers(layer)[0]!.options).toMatchObject({
         color: '#3388ff',
         fillColor: '#fff',
@@ -106,7 +108,12 @@ describe('DrawLayer', () => {
       const { map, layer } = setup({
         style: {
           color: 'tomato',
-          polygon: { color: 'navy', fillOpacity: 0.5, className: 'mine' },
+          polygon: {
+            color: 'navy',
+            fillOpacity: 0.5,
+            smoothFactor: 1,
+            className: 'mine',
+          },
           vertex: { radius: 8 },
           stroke: { color: 'lime', width: 4, dashArray: '4 4' },
         },
@@ -116,6 +123,7 @@ describe('DrawLayer', () => {
       expect(polygon!.options).toMatchObject({
         color: 'navy',
         fillOpacity: 0.5,
+        smoothFactor: 1,
       });
       expect(polygon!.getElement()?.getAttribute('class')).toContain(
         'leaflet-polygon mine',
@@ -191,11 +199,6 @@ describe('DrawLayer', () => {
     it('ignores undefined values instead of clearing defaults', () => {
       const layer = new DrawLayer({ style: { stroke: { width: undefined } } });
       expect(layer.resolvedStyle().stroke.width).toBe(2);
-    });
-
-    it('still honours the deprecated strokeWidth option', () => {
-      const { map } = setup({ strokeWidth: 6 });
-      expect(strokeAttribute(map, 'stroke-width')).toBe('6');
     });
   });
 

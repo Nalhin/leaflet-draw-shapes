@@ -61,10 +61,12 @@ A full TypeScript rewrite with a modern toolchain, tests and a live demo.
 ### Changed
 
 - The build uses tsdown (ESM + CJS + `.d.ts`), replacing `tsc` to ES5/CJS.
-- The `d3-selection`, `d3-shape`, `@turf/intersect`, `turf-polygon` and
-  `concavehull` dependencies were removed. Overlap detection now uses
-  `clipper-lib`, and the concave hull is a TypeScript port verified against the
-  original.
+- Dependencies cut from six to one, and the bundle size added to apps from
+  about 30 kB to 14 kB gzipped. `d3-selection`, `d3-shape`, `@turf/intersect`,
+  `turf-polygon`, `concavehull` and `clipper-lib` were removed. Polygon
+  operations use [`polygon-clipping`](https://github.com/mfogel/polygon-clipping)
+  (non-zero rule, as before), and the concave hull is a TypeScript port
+  verified against the original.
 - The freehand stroke is a single SVG path instead of one path per mouse move.
 - Moved from Yarn 1 to pnpm, Parcel to Vite, TypeScript 4.7 to 6.0 and
   Prettier 2 to 3, and added ESLint with typescript-eslint.

@@ -84,15 +84,7 @@ export class DrawLayer extends FeatureGroup {
     super();
     this.options = { ...defaultOptions, ...options };
     this.#mode = this.options.mode;
-    this.#style = mergeStyle(defaultStyle, {
-      ...this.options.style,
-      stroke: {
-        // Backwards compatibility; `style.stroke.width` takes precedence.
-        // eslint-disable-next-line @typescript-eslint/no-deprecated
-        width: this.options.strokeWidth,
-        ...this.options.style?.stroke,
-      },
-    });
+    this.#style = mergeStyle(defaultStyle, this.options.style);
     this.#resolvedStyle = resolveStyle(this.#style);
   }
 
