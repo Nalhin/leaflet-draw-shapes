@@ -5,7 +5,7 @@
 **Freehand polygon drawing for [Leaflet](https://leafletjs.com).**
 Sketch shapes with a mouse, pen or finger. Overlapping shapes merge, vertices drag, edges split, and everything comes back as GeoJSON.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Nalhin/leaflet-draw-shapes/ci.yml?branch=main&label=CI)](https://github.com/Nalhin/leaflet-draw-shapes/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/Nalhin/leaflet-draw-shapes/ci.yml?branch=main&event=push&label=CI)](https://github.com/Nalhin/leaflet-draw-shapes/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/leaflet-draw-shapes)](https://www.npmjs.com/package/leaflet-draw-shapes)
 [![Downloads](https://img.shields.io/npm/dm/leaflet-draw-shapes)](https://www.npmjs.com/package/leaflet-draw-shapes)
 [![Types](https://img.shields.io/npm/types/leaflet-draw-shapes)](https://www.npmjs.com/package/leaflet-draw-shapes)
