@@ -26,6 +26,12 @@ export interface DrawLayerStyle {
   polygon?: PathOptions;
   /** Leaflet circle-marker options for the vertex handles shown in `EDIT` mode. */
   vertex?: CircleMarkerOptions;
+  /**
+   * When vertex handles are drawn. With `'hover'` they stay invisible, but can
+   * still be grabbed, and appear only under the pointer or while dragged.
+   * @default 'hover'
+   */
+  showVertices?: 'hover' | 'always';
   /** The freehand line shown while drawing. */
   stroke?: StrokeStyle;
 }
@@ -34,12 +40,14 @@ export interface DrawLayerStyle {
 export interface ResolvedStyle {
   polygon: PathOptions;
   vertex: CircleMarkerOptions;
+  showVertices: 'hover' | 'always';
   stroke: Required<Omit<StrokeStyle, 'dashArray'>> &
     Pick<StrokeStyle, 'dashArray'>;
 }
 
 export const defaultStyle: Readonly<DrawLayerStyle> = Object.freeze({
   color: '#3388ff',
+  showVertices: 'hover',
   polygon: {},
   vertex: { radius: 5, weight: 2, fillColor: '#fff', fillOpacity: 1 },
   stroke: { width: 2, opacity: 1 },
@@ -67,10 +75,12 @@ export function mergeStyle(
 }
 
 export function resolveStyle(style: DrawLayerStyle): ResolvedStyle {
-  const { color = '#3388ff' } = style;
+  const { color = '#3388ff', showVertices = 'hover' } = style;
   return {
     polygon: { color, ...style.polygon },
-    vertex: { color, ...style.vertex },
+    // Explicit opacities so a hidden handle can be fully restored.
+    vertex: { color, opacity: 1, fillOpacity: 0.2, ...style.vertex },
+    showVertices,
     stroke: { color, width: 2, opacity: 1, ...style.stroke },
   };
 }

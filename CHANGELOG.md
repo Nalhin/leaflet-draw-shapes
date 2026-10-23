@@ -30,6 +30,8 @@ A full TypeScript rewrite with a modern toolchain, tests and a live demo.
 - Typed `style` option: one accent `color` themes polygons, vertex handles and
   the drawing stroke, with per-part overrides (`polygon`, `vertex`, `stroke`).
   Change it at runtime with `layer.style({...})`. No CSS import is needed.
+- Vertex handles are invisible until hovered or dragged, so shapes look clean
+  while staying editable. Use `style.showVertices: 'always'` to keep them visible.
 - `create()` accepts `[lat, lng]` tuples.
 - `mode()` works before the layer is added to a map.
 - Several `DrawLayer` instances can share one map.

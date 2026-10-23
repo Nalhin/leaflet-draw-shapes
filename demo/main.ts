@@ -13,7 +13,7 @@ import {
 } from 'leaflet-draw-shapes';
 
 const map = createMap('map', { zoomControl: false }).setView(
-  [51.505, -0.09],
+  [52.2297, 21.0122],
   13,
 );
 

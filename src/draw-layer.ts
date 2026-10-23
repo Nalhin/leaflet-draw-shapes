@@ -27,7 +27,7 @@ import {
   type DrawLayerStyle,
   type ResolvedStyle,
 } from './style';
-import { syncVertexVisibility } from './vertices';
+import { syncVertexVisibility, vertexAppearance } from './vertices';
 
 type Listener<K extends keyof DrawLayerEventMap> = (
   event: DrawLayerEventMap[K],
@@ -208,7 +208,7 @@ export class DrawLayer extends FeatureGroup {
         for (const shape of polygonsOf(context)) {
           shape.setStyle(polygon);
           for (const marker of context.vertices.get(shape) ?? []) {
-            marker.setStyle(vertex);
+            marker.setStyle(vertexAppearance(this.#resolvedStyle, false));
             if (vertex.radius !== undefined) marker.setRadius(vertex.radius);
           }
         }

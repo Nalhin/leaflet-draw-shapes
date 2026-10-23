@@ -13,7 +13,7 @@ Sketch shapes with a mouse, pen or finger. Overlapping shapes merge, vertices dr
 
 ### [Try the live demo →](https://nalhin.github.io/leaflet-draw-shapes/)
 
-[![Drawing shapes on a map of London](docs/demo.jpg)](https://nalhin.github.io/leaflet-draw-shapes/)
+[![Drawing shapes on a map of Warsaw](docs/demo.jpg)](https://nalhin.github.io/leaflet-draw-shapes/)
 
 </div>
 
@@ -44,7 +44,7 @@ import 'leaflet/dist/leaflet.css';
 import { map, tileLayer } from 'leaflet';
 import { drawLayer, CREATE, EDIT } from 'leaflet-draw-shapes';
 
-const myMap = map('map').setView([51.505, -0.09], 13);
+const myMap = map('map').setView([52.2297, 21.0122], 13);
 tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
 }).addTo(myMap);
@@ -140,6 +140,8 @@ Start with a single accent colour, which themes the shapes, vertex handles and d
 drawLayer({ style: { color: 'tomato' } });
 ```
 
+Vertex handles stay invisible so shapes look clean, but they can still be grabbed. A handle appears when the pointer is on it or while it's being dragged. Set `showVertices: 'always'` to keep them visible.
+
 Then fine-tune any part. `polygon` takes Leaflet [path options](https://leafletjs.com/reference.html#path-option), and `vertex` takes [circle marker options](https://leafletjs.com/reference.html#circlemarker-option):
 
 ```ts
@@ -153,12 +155,13 @@ drawLayer({
 });
 ```
 
-| Part      | Type                                                                       | Defaults                             |
-| --------- | -------------------------------------------------------------------------- | ------------------------------------ |
-| `color`   | `string`                                                                   | `'#3388ff'`, Leaflet's blue          |
-| `polygon` | [`PathOptions`](https://leafletjs.com/reference.html#path-option)          | Leaflet's defaults                   |
-| `vertex`  | [`CircleMarkerOptions`](https://leafletjs.com/reference.html#circlemarker) | `radius: 5`, `weight: 2`, white fill |
-| `stroke`  | `{ color, width, opacity, dashArray }`                                     | `width: 2`, `opacity: 1`             |
+| Part           | Type                                                                       | Defaults                                                     |
+| -------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `color`        | `string`                                                                   | `'#3388ff'`, Leaflet's blue                                  |
+| `showVertices` | `'hover' \| 'always'`                                                      | `'hover'`: handles are invisible until the pointer is on one |
+| `polygon`      | [`PathOptions`](https://leafletjs.com/reference.html#path-option)          | Leaflet's defaults                                           |
+| `vertex`       | [`CircleMarkerOptions`](https://leafletjs.com/reference.html#circlemarker) | `radius: 5`, `weight: 2`, white fill                         |
+| `stroke`       | `{ color, width, opacity, dashArray }`                                     | `width: 2`, `opacity: 1`                                     |
 
 ### Changing the style at runtime
 
@@ -173,12 +176,12 @@ shapes.style(); // the current style
 
 Every element also has a class, so you can style with CSS instead. CSS rules override the SVG attributes set from `style`.
 
-| Class                                   | Element                                  |
-| --------------------------------------- | ---------------------------------------- |
-| `.leaflet-polygon`                      | Drawn shapes                             |
-| `.leaflet-edge`                         | Vertex handles, shown in `EDIT` mode     |
-| `svg.leaflet-draw-shapes .leaflet-line` | The stroke while drawing                 |
-| `.mode-*`                               | Map container, one class per active mode |
+| Class                                   | Element                                        |
+| --------------------------------------- | ---------------------------------------------- |
+| `.leaflet-polygon`                      | Drawn shapes                                   |
+| `.leaflet-edge`                         | Vertex handles, only on the map in `EDIT` mode |
+| `svg.leaflet-draw-shapes .leaflet-line` | The stroke while drawing                       |
+| `.mode-*`                               | Map container, one class per active mode       |
 
 ## React Leaflet
 

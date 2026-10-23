@@ -142,6 +142,52 @@ describe('DrawLayer', () => {
       expect(layer.style().vertex?.fillColor).toBe('#fff');
     });
 
+    it('keeps vertex handles invisible until hovered or dragged', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.create(square(map, 400, 300));
+      const marker = vertexMarkers(layer)[0]!;
+      const visible = () => marker.options.opacity !== 0;
+
+      expect(vertexMarkers(layer)).toHaveLength(4);
+      expect(visible()).toBe(false);
+      expect(marker.options.fillOpacity).toBe(0);
+
+      marker.fire('mouseover');
+      expect(visible()).toBe(true);
+      expect(marker.options.fillOpacity).toBe(1);
+
+      marker.fire('mouseout');
+      expect(visible()).toBe(false);
+
+      // Stays visible while dragged, even when the pointer outruns it.
+      marker.fire('mouseover');
+      marker.fire('mousedown');
+      marker.fire('mouseout');
+      expect(visible()).toBe(true);
+    });
+
+    it("shows vertex handles permanently with showVertices: 'always'", () => {
+      const { map, layer } = setup({
+        mode: EDIT,
+        style: { showVertices: 'always' },
+      });
+      layer.create(square(map, 400, 300));
+      expect(vertexMarkers(layer)[0]!.options).toMatchObject({
+        opacity: 1,
+        fillOpacity: 1,
+      });
+    });
+
+    it('style() keeps hidden handles hidden', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.create(square(map, 400, 300));
+      layer.style({ color: 'gold' });
+      expect(vertexMarkers(layer)[0]!.options).toMatchObject({
+        color: 'gold',
+        opacity: 0,
+      });
+    });
+
     it('ignores undefined values instead of clearing defaults', () => {
       const layer = new DrawLayer({ style: { stroke: { width: undefined } } });
       expect(layer.resolvedStyle().stroke.width).toBe(2);

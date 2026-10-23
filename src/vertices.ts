@@ -1,4 +1,9 @@
-import { CircleMarker, type LeafletMouseEvent, type Polygon } from 'leaflet';
+import {
+  CircleMarker,
+  type CircleMarkerOptions,
+  type LeafletMouseEvent,
+  type Polygon,
+} from 'leaflet';
 import {
   notify,
   outerRing,
@@ -9,6 +14,7 @@ import {
 import { CREATE, EDIT, hasMode, type Mode } from './modes';
 import type { DrawLayerOptions } from './options';
 import { createPolygons, mergePolygons, removePolygon } from './polygons';
+import type { ResolvedStyle } from './style';
 
 export const vertexClassName = 'leaflet-edge';
 
@@ -17,6 +23,19 @@ export function syncVertexVisibility(context: DrawContext, mode: Mode): void {
   const { map, vertexLayer } = context;
   if (hasMode(mode, EDIT)) vertexLayer.addTo(map);
   else vertexLayer.remove();
+}
+
+/**
+ * Path options for a vertex handle. Hidden handles are fully transparent but
+ * keep their shape, so they can still be hovered and grabbed.
+ */
+export function vertexAppearance(
+  style: ResolvedStyle,
+  visible: boolean,
+): CircleMarkerOptions {
+  return visible || style.showVertices === 'always'
+    ? style.vertex
+    : { ...style.vertex, opacity: 0, fillOpacity: 0 };
 }
 
 export function removeVertices(context: DrawContext, polygon: Polygon): void {
@@ -33,17 +52,26 @@ export function createVertices(
   options: DrawLayerOptions,
 ): CircleMarker[] {
   const { map, layer } = context;
-  const { vertex } = layer.resolvedStyle();
+  const style = layer.resolvedStyle();
+  const reveal = (marker: CircleMarker, visible: boolean): void => {
+    marker.setStyle(vertexAppearance(layer.resolvedStyle(), visible));
+  };
 
   const markers = outerRing(polygon).map((latLng) => {
     const marker = new CircleMarker(latLng, {
-      ...vertex,
-      className: [vertexClassName, vertex.className].filter(Boolean).join(' '),
+      ...vertexAppearance(style, false),
+      className: [vertexClassName, style.vertex.className]
+        .filter(Boolean)
+        .join(' '),
       bubblingMouseEvents: false,
     });
     context.vertexLayer.addLayer(marker);
 
     marker.on(propagationEvents, stopMapPropagation);
+    marker.on('mouseover', () => reveal(marker, true));
+    marker.on('mouseout', () => {
+      if (!context.draggingVertex) reveal(marker, false);
+    });
     marker.on('mousedown', () => startDrag(marker));
     return marker;
   });
