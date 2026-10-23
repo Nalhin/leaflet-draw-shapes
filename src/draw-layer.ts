@@ -20,7 +20,14 @@ import {
 } from './modes';
 import { defaultOptions, type DrawLayerOptions } from './options';
 import { clearPolygons, createPolygons, removePolygon } from './polygons';
-import { syncVertexState } from './vertices';
+import {
+  defaultStyle,
+  mergeStyle,
+  resolveStyle,
+  type DrawLayerStyle,
+  type ResolvedStyle,
+} from './style';
+import { syncVertexVisibility } from './vertices';
 
 type Listener<K extends keyof DrawLayerEventMap> = (
   event: DrawLayerEventMap[K],
@@ -68,6 +75,8 @@ export class DrawLayer extends FeatureGroup {
   declare options: DrawLayerOptions;
 
   #mode: Mode;
+  #style: DrawLayerStyle;
+  #resolvedStyle: ResolvedStyle;
   #context: DrawContext | null = null;
   #freehand: FreehandHandle | null = null;
 
@@ -75,6 +84,16 @@ export class DrawLayer extends FeatureGroup {
     super();
     this.options = { ...defaultOptions, ...options };
     this.#mode = this.options.mode;
+    this.#style = mergeStyle(defaultStyle, {
+      ...this.options.style,
+      stroke: {
+        // Backwards compatibility; `style.stroke.width` takes precedence.
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        width: this.options.strokeWidth,
+        ...this.options.style?.stroke,
+      },
+    });
+    this.#resolvedStyle = resolveStyle(this.#style);
   }
 
   override onAdd(map: Map): this {
@@ -83,9 +102,10 @@ export class DrawLayer extends FeatureGroup {
     const context: DrawContext = {
       map,
       layer: this,
-      vertexLayer: new LayerGroup().addTo(map),
+      vertexLayer: new LayerGroup(),
       vertices: new WeakMap(),
       deferredNotify: null,
+      draggingVertex: false,
     };
     this.#context = context;
     this.#freehand = enableFreehand(context, (latLngs) => {
@@ -110,6 +130,7 @@ export class DrawLayer extends FeatureGroup {
         .getContainer()
         .classList.remove(
           noModeClassName,
+          crosshairClassName,
           ...modeClassNames.map(([, name]) => name),
         );
       if (hasMode(this.#mode, CREATE)) this.#setDragging(map, true);
@@ -170,6 +191,37 @@ export class DrawLayer extends FeatureGroup {
     return this.#mode;
   }
 
+  /**
+   * Returns the style, first merging in `style` when given. Changes apply
+   * immediately to existing polygons and vertices.
+   *
+   * @example layer.style({ color: 'tomato', vertex: { radius: 7 } });
+   */
+  style(style?: DrawLayerStyle): DrawLayerStyle {
+    if (style) {
+      this.#style = mergeStyle(this.#style, style);
+      this.#resolvedStyle = resolveStyle(this.#style);
+
+      const context = this.#context;
+      if (context) {
+        const { polygon, vertex } = this.#resolvedStyle;
+        for (const shape of polygonsOf(context)) {
+          shape.setStyle(polygon);
+          for (const marker of context.vertices.get(shape) ?? []) {
+            marker.setStyle(vertex);
+            if (vertex.radius !== undefined) marker.setRadius(vertex.radius);
+          }
+        }
+      }
+    }
+    return this.#style;
+  }
+
+  /** The style with defaults and the accent colour applied to each part. */
+  resolvedStyle(): ResolvedStyle {
+    return this.#resolvedStyle;
+  }
+
   /** The number of polygons on the layer. */
   size(): number {
     return this.all().length;
@@ -194,9 +246,11 @@ export class DrawLayer extends FeatureGroup {
 
     // Panning and freehand drawing share the same gesture.
     this.#setDragging(map, !hasMode(mode, CREATE));
-    syncVertexState(context, mode);
+    syncVertexVisibility(context, mode);
 
     const { classList } = map.getContainer();
+    // Leaflet's own stylesheet turns this class into a crosshair cursor.
+    classList.toggle(crosshairClassName, hasMode(mode, CREATE));
     for (const [flag, className] of modeClassNames) {
       classList.toggle(className, hasMode(mode, flag));
     }
@@ -211,6 +265,8 @@ export class DrawLayer extends FeatureGroup {
     else if (map.options.dragging !== false) map.dragging.enable();
   }
 }
+
+const crosshairClassName = 'leaflet-crosshair';
 
 /** Creates a {@link DrawLayer}. */
 export function drawLayer(options?: Partial<DrawLayerOptions>): DrawLayer {

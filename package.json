@@ -23,9 +23,7 @@
   },
   "bugs": "https://github.com/Nalhin/leaflet-draw-shapes/issues",
   "type": "module",
-  "sideEffects": [
-    "*.css"
-  ],
+  "sideEffects": false,
   "files": [
     "dist"
   ],
@@ -37,7 +35,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./style.css": "./dist/style.css",
     "./package.json": "./package.json"
   },
   "scripts": {

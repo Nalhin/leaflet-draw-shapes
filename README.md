@@ -23,7 +23,7 @@ Sketch shapes with a mouse, pen or finger. Overlapping shapes merge, vertices dr
 - 🧲 **Smart shapes.** Strokes are cleaned up with a concave hull, self-intersections are split, and overlapping shapes merge.
 - 🎛️ **Composable modes.** Create, edit, delete and append are bit flags, so you can combine them however you like.
 - 🗺️ **A real Leaflet layer.** `DrawLayer` is a `FeatureGroup`, so `toGeoJSON()`, `getBounds()` and `getLayers()` just work.
-- 🎨 **Styleable.** Pass any Leaflet `PathOptions`, or use the optional stylesheet and its CSS variables.
+- 🎨 **One-line theming.** No CSS to import. A single `color` themes shapes, handles and the stroke, and a typed `style` object handles the rest, live.
 - 🦺 **TypeScript-first.** Strictly typed, including typed event listeners.
 - 📦 **Light.** About 6 kB gzipped, ships ESM and CJS, and depends only on `clipper-lib`.
 
@@ -41,7 +41,6 @@ Supports Leaflet `1.8` and `1.9`.
 
 ```ts
 import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw-shapes/style.css'; // optional default styles
 import { map, tileLayer } from 'leaflet';
 import { drawLayer, CREATE, EDIT } from 'leaflet-draw-shapes';
 
@@ -50,9 +49,10 @@ tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
 }).addTo(myMap);
 
-const shapes = drawLayer({ mode: CREATE | EDIT, color: '#6d5efc' }).addTo(
-  myMap,
-);
+const shapes = drawLayer({
+  mode: CREATE | EDIT,
+  style: { color: '#6d5efc' },
+}).addTo(myMap);
 
 shapes.on('markers', ({ latLngs, eventType }) => {
   console.log(`${eventType}: ${latLngs.length} shapes`);
@@ -85,11 +85,10 @@ The active modes are also added to the map container as classes (`mode-create`, 
 
 ## Options
 
-Every Leaflet [`PathOptions`](https://leafletjs.com/reference.html#path-option) (`color`, `weight`, `fillOpacity`, …) is applied to the drawn polygons. The layer-specific options are:
-
 | Option                 | Default    | Description                                                            |
 | ---------------------- | ---------- | ---------------------------------------------------------------------- |
 | `mode`                 | `ALL`      | Initial mode.                                                          |
+| `style`                | see below  | How everything looks. See [Styling](#styling).                         |
 | `mergePolygons`        | `true`     | Merge shapes that overlap.                                             |
 | `concavePolygon`       | `true`     | Run a concave hull over freehand strokes to tidy them up.              |
 | `maximumPolygons`      | `Infinity` | Maximum number of shapes on the layer.                                 |
@@ -98,21 +97,21 @@ Every Leaflet [`PathOptions`](https://leafletjs.com/reference.html#path-option) 
 | `elbowDistance`        | `10`       | Pixel distance from an edge that counts as an append click.            |
 | `simplifyFactor`       | `1.1`      | Pixel distance under which near-duplicate vertices are dropped.        |
 | `smoothFactor`         | `0.3`      | Leaflet's polyline smoothing for the rendered outline.                 |
-| `strokeWidth`          | `2`        | Width of the freehand stroke shown while drawing.                      |
 
 ## API
 
 `DrawLayer` extends [`L.FeatureGroup`](https://leafletjs.com/reference.html#featuregroup). On top of that it has:
 
-| Method                      | Returns     | Description                                                                                                   |
-| --------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
-| `create(latLngs, options?)` | `Polygon[]` | Add a shape from `LatLng`s, `{ lat, lng }` objects or `[lat, lng]` tuples. Skips the concave hull by default. |
-| `removePolygon(polygon)`    | `void`      | Remove one shape.                                                                                             |
-| `clear()`                   | `void`      | Remove every shape.                                                                                           |
-| `mode(mode?)`               | `Mode`      | Get the mode, or set it and get it back.                                                                      |
-| `all()`                     | `Polygon[]` | Every shape, in creation order.                                                                               |
-| `size()`                    | `number`    | Number of shapes.                                                                                             |
-| `cancel()`                  | `void`      | Abandon the stroke in progress. Handy for an `Escape` key binding.                                            |
+| Method                      | Returns          | Description                                                                                                   |
+| --------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `create(latLngs, options?)` | `Polygon[]`      | Add a shape from `LatLng`s, `{ lat, lng }` objects or `[lat, lng]` tuples. Skips the concave hull by default. |
+| `removePolygon(polygon)`    | `void`           | Remove one shape.                                                                                             |
+| `clear()`                   | `void`           | Remove every shape.                                                                                           |
+| `mode(mode?)`               | `Mode`           | Get the mode, or set it and get it back.                                                                      |
+| `style(style?)`             | `DrawLayerStyle` | Get the style, or merge in changes. Existing shapes update immediately.                                       |
+| `all()`                     | `Polygon[]`      | Every shape, in creation order.                                                                               |
+| `size()`                    | `number`         | Number of shapes.                                                                                             |
+| `cancel()`                  | `void`           | Abandon the stroke in progress. Handy for an `Escape` key binding.                                            |
 
 Use `drawLayer(options)` or `new DrawLayer(options)`. Removing the layer from the map also removes its shapes and listeners.
 
@@ -133,24 +132,53 @@ shapes.on('mode', (event: ModeEvent) => event.mode);
 
 ## Styling
 
-Import `leaflet-draw-shapes/style.css` for vertex handles, a crosshair cursor while drawing, and pointer cursors in delete and append mode. You can tweak it with CSS variables:
+There's no CSS to import. Everything is styled from JavaScript through one typed `style` option.
 
-```css
-.leaflet-container {
-  --lds-accent: #6d5efc; /* vertex border */
-  --lds-stroke: #111; /* freehand stroke */
-  --lds-vertex-size: 14px;
-}
+Start with a single accent colour, which themes the shapes, vertex handles and drawing stroke together:
+
+```ts
+drawLayer({ style: { color: 'tomato' } });
 ```
 
-Or write your own styles. The relevant classes are:
+Then fine-tune any part. `polygon` takes Leaflet [path options](https://leafletjs.com/reference.html#path-option), and `vertex` takes [circle marker options](https://leafletjs.com/reference.html#circlemarker-option):
 
-| Class                                      | Element                                    |
-| ------------------------------------------ | ------------------------------------------ |
-| `.leaflet-polygon`                         | Drawn shapes                               |
-| `.leaflet-edge` / `.leaflet-edge.disabled` | Vertex handles (`disabled` outside `EDIT`) |
-| `svg.leaflet-draw-shapes .leaflet-line`    | The stroke while drawing                   |
-| `.mode-*`                                  | Map container, per active mode             |
+```ts
+drawLayer({
+  style: {
+    color: '#6d5efc',
+    polygon: { weight: 2, fillOpacity: 0.25, dashArray: '6 4' },
+    vertex: { radius: 6, fillColor: '#fff' },
+    stroke: { width: 3, opacity: 0.8 },
+  },
+});
+```
+
+| Part      | Type                                                                       | Defaults                             |
+| --------- | -------------------------------------------------------------------------- | ------------------------------------ |
+| `color`   | `string`                                                                   | `'#3388ff'`, Leaflet's blue          |
+| `polygon` | [`PathOptions`](https://leafletjs.com/reference.html#path-option)          | Leaflet's defaults                   |
+| `vertex`  | [`CircleMarkerOptions`](https://leafletjs.com/reference.html#circlemarker) | `radius: 5`, `weight: 2`, white fill |
+| `stroke`  | `{ color, width, opacity, dashArray }`                                     | `width: 2`, `opacity: 1`             |
+
+### Changing the style at runtime
+
+`style()` works like `mode()`: call it with no arguments to read the style, or pass a partial style to merge in. Existing shapes and handles update immediately.
+
+```ts
+shapes.style({ color: darkMode ? '#a5b4fc' : '#4f46e5' });
+shapes.style(); // the current style
+```
+
+### Prefer CSS?
+
+Every element also has a class, so you can style with CSS instead. CSS rules override the SVG attributes set from `style`.
+
+| Class                                   | Element                                  |
+| --------------------------------------- | ---------------------------------------- |
+| `.leaflet-polygon`                      | Drawn shapes                             |
+| `.leaflet-edge`                         | Vertex handles, shown in `EDIT` mode     |
+| `svg.leaflet-draw-shapes .leaflet-line` | The stroke while drawing                 |
+| `.mode-*`                               | Map container, one class per active mode |
 
 ## React Leaflet
 
@@ -184,6 +212,7 @@ Version 2 is a TypeScript rewrite. Most code keeps working; the breaking changes
 - **Internal exports removed.** `polygons`, `instanceKey`, `modesKey`, `edgesKey`, `notifyDeferredKey` and the `map.simplifyPolygon` hook are gone. Use `all()`, `mode()` and the events instead.
 - **Removing the layer cleans up.** Shapes, vertex handles and DOM listeners are removed, and map dragging is restored.
 - **Shapes are children of the layer.** `getLayers()`, `toGeoJSON()` and `getBounds()` now return them.
+- **Styling moved to `style`.** Polygon path options such as `color` now go in `style.polygon`, or use `style.color` to theme everything. `strokeWidth` still works but is deprecated. Vertex handles are SVG circles now, so old `.leaflet-edge` CSS for `DivIcon`s needs updating.
 - **`create()`** always returns an array (`[]` when off-map), includes the new shape when nothing merged with it, and accepts `[lat, lng]` tuples.
 - **`markers` events** are no longer fired for clicks that didn't draw anything. Appending a vertex while both `DELETE` and `APPEND` are active now reports `'append'` instead of `'remove'`.
 

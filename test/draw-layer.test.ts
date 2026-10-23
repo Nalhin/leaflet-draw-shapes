@@ -1,4 +1,4 @@
-import { Marker, Point, Polygon, type LatLng } from 'leaflet';
+import { CircleMarker, Point, Polygon, type LatLng } from 'leaflet';
 import { describe, expect, it, vi } from 'vitest';
 import DefaultExport, {
   ALL,
@@ -20,11 +20,11 @@ import {
   strokeWithTouch,
 } from './helpers';
 
-const vertexMarkers = (layer: DrawLayer): Marker[] => {
-  const markers: Marker[] = [];
+const vertexMarkers = (layer: DrawLayer): CircleMarker[] => {
+  const markers: CircleMarker[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reach the map's layers
   layer['_map'].eachLayer((l: any) => {
-    if (l instanceof Marker) markers.push(l);
+    if (l instanceof CircleMarker) markers.push(l);
   });
   return markers;
 };
@@ -62,6 +62,97 @@ describe('DrawLayer', () => {
     });
   });
 
+  describe('style', () => {
+    /** Starts and releases a stroke, reading an attribute of its SVG path. */
+    const strokeAttribute = (map: DrawLayer['_map'], name: string) => {
+      const container = map.getContainer();
+      container.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          clientX: 10,
+          clientY: 10,
+        }),
+      );
+      const value = container
+        .querySelector('path.leaflet-line')
+        ?.getAttribute(name);
+      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      return value;
+    };
+
+    it('works without any configuration or CSS', () => {
+      const { map, layer } = setup({ mode: ALL });
+      layer.create(square(map, 400, 300));
+
+      expect(layer.all()[0]!.options.color).toBe('#3388ff');
+      expect(vertexMarkers(layer)[0]!.options).toMatchObject({
+        color: '#3388ff',
+        fillColor: '#fff',
+        radius: 5,
+      });
+      expect(document.querySelectorAll('style, link')).toHaveLength(0);
+    });
+
+    it('themes polygons, vertices and the stroke with one colour', () => {
+      const { map, layer } = setup({ style: { color: 'tomato' } });
+      layer.create(square(map, 400, 300));
+
+      expect(layer.all()[0]!.options.color).toBe('tomato');
+      expect(vertexMarkers(layer)[0]!.options.color).toBe('tomato');
+      expect(strokeAttribute(map, 'stroke')).toBe('tomato');
+    });
+
+    it('lets each part override the accent colour', () => {
+      const { map, layer } = setup({
+        style: {
+          color: 'tomato',
+          polygon: { color: 'navy', fillOpacity: 0.5, className: 'mine' },
+          vertex: { radius: 8 },
+          stroke: { color: 'lime', width: 4, dashArray: '4 4' },
+        },
+      });
+      const [polygon] = layer.create(square(map, 400, 300));
+
+      expect(polygon!.options).toMatchObject({
+        color: 'navy',
+        fillOpacity: 0.5,
+      });
+      expect(polygon!.getElement()?.getAttribute('class')).toContain(
+        'leaflet-polygon mine',
+      );
+      expect(vertexMarkers(layer)[0]!.options).toMatchObject({
+        color: 'tomato',
+        radius: 8,
+      });
+      expect(strokeAttribute(map, 'stroke')).toBe('lime');
+      expect(strokeAttribute(map, 'stroke-width')).toBe('4');
+      expect(strokeAttribute(map, 'stroke-dasharray')).toBe('4 4');
+    });
+
+    it('style() updates existing polygons and vertices', () => {
+      const { map, layer } = setup();
+      layer.create(square(map, 400, 300));
+      const returned = layer.style({ color: 'gold', vertex: { radius: 9 } });
+
+      expect(returned.color).toBe('gold');
+      expect(layer.all()[0]!.options.color).toBe('gold');
+      expect(vertexMarkers(layer)[0]!.getRadius()).toBe(9);
+      expect(vertexMarkers(layer)[0]!.options.color).toBe('gold');
+      // Earlier settings are kept.
+      expect(layer.style().vertex?.fillColor).toBe('#fff');
+    });
+
+    it('ignores undefined values instead of clearing defaults', () => {
+      const layer = new DrawLayer({ style: { stroke: { width: undefined } } });
+      expect(layer.resolvedStyle().stroke.width).toBe(2);
+    });
+
+    it('still honours the deprecated strokeWidth option', () => {
+      const { map } = setup({ strokeWidth: 6 });
+      expect(strokeAttribute(map, 'stroke-width')).toBe('6');
+    });
+  });
+
   describe('create()', () => {
     it('adds a polygon and fires a closed ring', () => {
       const { map, layer, events } = setup();
@@ -86,16 +177,6 @@ describe('DrawLayer', () => {
         ({ lat, lng }) => [lat, lng] as [number, number],
       );
       expect(layer.create(tuples)).toHaveLength(1);
-    });
-
-    it('applies Leaflet path options to the polygon', () => {
-      const { map, layer } = setup({ color: 'red', className: 'mine' });
-      const [polygon] = layer.create(square(map, 400, 300));
-
-      expect(polygon!.options.color).toBe('red');
-      expect(polygon!.getElement()?.getAttribute('class')).toContain(
-        'leaflet-polygon mine',
-      );
     });
 
     it('makes polygons available through the FeatureGroup API', () => {
@@ -244,17 +325,24 @@ describe('DrawLayer', () => {
       expect(map.dragging.enabled()).toBe(false);
     });
 
-    it('disables vertices outside EDIT mode', () => {
+    it('shows vertices only in EDIT mode', () => {
       const { map, layer } = setup({ mode: EDIT });
       layer.create(square(map, 400, 300));
-      const isDisabled = () =>
-        vertexMarkers(layer).map((marker) =>
-          marker.getElement()?.classList.contains('disabled'),
-        );
+      expect(vertexMarkers(layer)).toHaveLength(4);
 
-      expect(isDisabled()).toEqual([false, false, false, false]);
       layer.mode(CREATE);
-      expect(isDisabled()).toEqual([true, true, true, true]);
+      expect(vertexMarkers(layer)).toHaveLength(0);
+
+      layer.mode(EDIT);
+      expect(vertexMarkers(layer)).toHaveLength(4);
+    });
+
+    it('uses a crosshair cursor in CREATE mode', () => {
+      const { map, layer } = setup({ mode: CREATE });
+      const { classList } = map.getContainer();
+      expect(classList.contains('leaflet-crosshair')).toBe(true);
+      layer.mode(EDIT);
+      expect(classList.contains('leaflet-crosshair')).toBe(false);
     });
   });
 
@@ -274,7 +362,7 @@ describe('DrawLayer', () => {
     });
 
     it('draws the stroke on an SVG overlay and clears it afterwards', () => {
-      const { map } = setup({ mode: CREATE, strokeWidth: 5 });
+      const { map } = setup({ mode: CREATE, style: { stroke: { width: 5 } } });
       const container = map.getContainer();
       const points = circlePoints(400, 300, 100);
 
@@ -393,7 +481,7 @@ describe('DrawLayer', () => {
     });
 
     it('appends a vertex on the nearest edge in APPEND mode', () => {
-      const { map, layer, events } = setup({ mode: APPEND });
+      const { map, layer, events } = setup({ mode: EDIT | APPEND });
       const [polygon] = layer.create(square(map, 400, 300));
       clickAt(polygon!, map, new Point(400, 252));
 
@@ -425,7 +513,7 @@ describe('DrawLayer', () => {
   });
 
   describe('editing vertices', () => {
-    const drag = (layer: DrawLayer, marker: Marker, to: Point) => {
+    const drag = (layer: DrawLayer, marker: CircleMarker, to: Point) => {
       const map = layer['_map'];
       marker.fire('mousedown');
       map.fire('mousemove', { latlng: map.containerPointToLatLng(to) });
@@ -459,10 +547,12 @@ describe('DrawLayer', () => {
     });
 
     it('is ignored outside EDIT mode', () => {
-      const { map, layer, events } = setup({ mode: DELETE });
+      const { map, layer, events } = setup({ mode: EDIT });
       layer.create(square(map, 400, 300));
+      const marker = vertexMarkers(layer)[0]!;
+      layer.mode(DELETE);
       const before = layer.all()[0]!.getLatLngs();
-      drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
+      drag(layer, marker, new Point(300, 200));
 
       expect(layer.all()[0]!.getLatLngs()).toEqual(before);
       expect(events.at(-1)?.eventType).toBe('create');

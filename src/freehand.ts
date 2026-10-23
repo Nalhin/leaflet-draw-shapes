@@ -1,7 +1,6 @@
 import { DomEvent, type LatLng } from 'leaflet';
 import type { DrawContext } from './context';
 import { CREATE, hasMode } from './modes';
-import { vertexClassName } from './vertices';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -21,10 +20,6 @@ function positionOf(event: Event): ClientPosition | undefined {
   return 'touches' in event
     ? (event as TouchEvent).touches[0]
     : (event as MouseEvent);
-}
-
-function isVertex(target: EventTarget | null): boolean {
-  return target instanceof Element && !!target.closest(`.${vertexClassName}`);
 }
 
 /**
@@ -59,7 +54,7 @@ export function enableFreehand(
     if (!hasMode(layer.mode(), CREATE) || cancelStroke) return;
     if (event instanceof MouseEvent && event.button !== 0) return;
     // Dragging a vertex in `CREATE | EDIT` mode should not start a stroke.
-    if (isVertex(event.target)) return;
+    if (context.draggingVertex) return;
 
     const origin = positionOf(event);
     if (!origin) return;
@@ -67,11 +62,19 @@ export function enableFreehand(
     const { x, y } = toContainerPoint(origin);
     const path = document.createElementNS(SVG_NS, 'path');
     path.classList.add('leaflet-line');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'black');
-    path.setAttribute('stroke-width', String(layer.options.strokeWidth));
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
+    const { stroke } = layer.resolvedStyle();
+    const attributes = {
+      fill: 'none',
+      stroke: stroke.color,
+      'stroke-width': String(stroke.width),
+      'stroke-opacity': String(stroke.opacity),
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      ...(stroke.dashArray && { 'stroke-dasharray': stroke.dashArray }),
+    };
+    for (const [name, value] of Object.entries(attributes)) {
+      path.setAttribute(name, value);
+    }
     svg.appendChild(path);
 
     let d = `M${x} ${y}`;

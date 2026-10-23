@@ -49,11 +49,11 @@ export function createPolygons(
   for (const path of simplify(toPath(map, shape), options.simplifyFactor)) {
     if (polygonsOf(context).length >= options.maximumPolygons) break;
 
+    const style = layer.resolvedStyle().polygon;
     const polygon = new Polygon(toLatLngs(map, path), {
-      ...options,
-      className: ['leaflet-polygon', options.className]
-        .filter(Boolean)
-        .join(' '),
+      ...style,
+      smoothFactor: options.smoothFactor,
+      className: ['leaflet-polygon', style.className].filter(Boolean).join(' '),
     });
     layer.addLayer(polygon);
     context.vertices.set(polygon, createVertices(context, polygon, options));

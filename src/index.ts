@@ -2,6 +2,12 @@ import { DrawLayer } from './draw-layer';
 
 export { DrawLayer, drawLayer } from './draw-layer';
 export { defaultOptions, type DrawLayerOptions } from './options';
+export {
+  defaultStyle,
+  type DrawLayerStyle,
+  type ResolvedStyle,
+  type StrokeStyle,
+} from './style';
 export type {
   DrawLayerEventMap,
   MarkersEvent,

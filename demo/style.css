@@ -32,10 +32,6 @@ body,
   margin: 0;
 }
 
-.leaflet-container {
-  --lds-accent: var(--accent);
-}
-
 .panel {
   position: absolute;
   z-index: 1100;

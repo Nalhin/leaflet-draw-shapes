@@ -1,11 +1,9 @@
-import type { PathOptions } from 'leaflet';
+import type { LayerOptions } from 'leaflet';
 import { ALL, type Mode } from './modes';
+import type { DrawLayerStyle } from './style';
 
-/**
- * Options accepted by {@link DrawLayer}. Any Leaflet `PathOptions`
- * (`color`, `weight`, `fillOpacity`, …) are applied to the drawn polygons.
- */
-export interface DrawLayerOptions extends PathOptions {
+/** Options accepted by {@link DrawLayer}. */
+export interface DrawLayerOptions extends LayerOptions {
   /**
    * Initial interaction mode.
    * @default ALL
@@ -62,10 +60,16 @@ export interface DrawLayerOptions extends PathOptions {
   leaveModeAfterCreate: boolean;
 
   /**
-   * Width in pixels of the freehand stroke shown while drawing.
-   * @default 2
+   * How polygons, vertex handles and the drawing stroke look.
+   * @see DrawLayerStyle
    */
-  strokeWidth: number;
+  style?: DrawLayerStyle;
+
+  /**
+   * Width in pixels of the freehand stroke shown while drawing.
+   * @deprecated Use `style.stroke.width`.
+   */
+  strokeWidth?: number;
 }
 
 export const defaultOptions: Readonly<DrawLayerOptions> = Object.freeze({
@@ -78,5 +82,4 @@ export const defaultOptions: Readonly<DrawLayerOptions> = Object.freeze({
   maximumPolygons: Infinity,
   notifyAfterEditExit: false,
   leaveModeAfterCreate: false,
-  strokeWidth: 2,
 });

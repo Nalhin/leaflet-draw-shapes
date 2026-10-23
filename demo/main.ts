@@ -1,5 +1,4 @@
 import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw-shapes/style.css';
 import './style.css';
 import { map as createMap, tileLayer } from 'leaflet';
 import {
@@ -26,9 +25,10 @@ tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const layer = drawLayer({
   mode: ALL,
-  color: '#6d5efc',
-  weight: 2,
-  fillOpacity: 0.25,
+  style: {
+    color: '#6d5efc',
+    polygon: { weight: 2, fillOpacity: 0.25 },
+  },
 }).addTo(map);
 
 const $ = (selector: string): Element => document.querySelector(selector)!;

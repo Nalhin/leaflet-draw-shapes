@@ -1,4 +1,4 @@
-import { DivIcon, Marker, type LeafletMouseEvent, type Polygon } from 'leaflet';
+import { CircleMarker, type LeafletMouseEvent, type Polygon } from 'leaflet';
 import {
   notify,
   outerRing,
@@ -11,15 +11,12 @@ import type { DrawLayerOptions } from './options';
 import { createPolygons, mergePolygons, removePolygon } from './polygons';
 
 export const vertexClassName = 'leaflet-edge';
-export const disabledClassName = 'disabled';
 
-/** Toggles the `disabled` class on every vertex to match `mode`. */
-export function syncVertexState(context: DrawContext, mode: Mode): void {
-  context.vertexLayer.eachLayer((layer) => {
-    (layer as Marker)
-      .getElement()
-      ?.classList.toggle(disabledClassName, !hasMode(mode, EDIT));
-  });
+/** Vertices are only on the map, and so only interactive, in `EDIT` mode. */
+export function syncVertexVisibility(context: DrawContext, mode: Mode): void {
+  const { map, vertexLayer } = context;
+  if (hasMode(mode, EDIT)) vertexLayer.addTo(map);
+  else vertexLayer.remove();
 }
 
 export function removeVertices(context: DrawContext, polygon: Polygon): void {
@@ -29,22 +26,21 @@ export function removeVertices(context: DrawContext, polygon: Polygon): void {
   context.vertices.delete(polygon);
 }
 
-/** Creates a draggable marker for each vertex of `polygon` (active in `EDIT` mode). */
+/** Creates a draggable handle for each vertex of `polygon`. */
 export function createVertices(
   context: DrawContext,
   polygon: Polygon,
   options: DrawLayerOptions,
-): Marker[] {
+): CircleMarker[] {
   const { map, layer } = context;
+  const { vertex } = layer.resolvedStyle();
 
   const markers = outerRing(polygon).map((latLng) => {
-    const enabled = hasMode(layer.mode(), EDIT);
-    const icon = new DivIcon({
-      className: enabled
-        ? vertexClassName
-        : `${vertexClassName} ${disabledClassName}`,
+    const marker = new CircleMarker(latLng, {
+      ...vertex,
+      className: [vertexClassName, vertex.className].filter(Boolean).join(' '),
+      bubblingMouseEvents: false,
     });
-    const marker = new Marker(latLng, { icon });
     context.vertexLayer.addLayer(marker);
 
     marker.on(propagationEvents, stopMapPropagation);
@@ -52,9 +48,11 @@ export function createVertices(
     return marker;
   });
 
-  function startDrag(marker: Marker): void {
+  function startDrag(marker: CircleMarker): void {
     if (!hasMode(layer.mode(), EDIT)) return;
 
+    // Tell the freehand handler, which sees the same mousedown next, to ignore it.
+    context.draggingVertex = true;
     // Map panning would fight with the vertex drag.
     map.dragging.disable();
 
@@ -69,6 +67,7 @@ export function createVertices(
       map.off('mousemove', onMove);
       map.off('mouseup', onEnd);
       marker.off('mouseup', onEnd);
+      context.draggingVertex = false;
 
       if (!hasMode(layer.mode(), CREATE) && map.options.dragging !== false) {
         map.dragging.enable();

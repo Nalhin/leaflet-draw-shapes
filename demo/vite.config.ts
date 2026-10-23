@@ -6,9 +6,6 @@ const config: UserConfig = defineConfig({
   base: './',
   resolve: {
     alias: {
-      'leaflet-draw-shapes/style.css': fileURLToPath(
-        new URL('../src/style.css', import.meta.url),
-      ),
       'leaflet-draw-shapes': fileURLToPath(
         new URL('../src/index.ts', import.meta.url),
       ),

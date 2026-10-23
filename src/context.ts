@@ -1,11 +1,11 @@
 import {
   DomEvent,
   Polygon,
+  type CircleMarker,
   type LatLng,
   type LayerGroup,
   type LeafletEvent,
   type Map,
-  type Marker,
 } from 'leaflet';
 import type { DrawLayer } from './draw-layer';
 import type { MarkersEventType } from './events';
@@ -16,7 +16,9 @@ export interface DrawContext {
   readonly layer: DrawLayer;
   /** Vertex markers live here so they never leak into `layer.toGeoJSON()`. */
   readonly vertexLayer: LayerGroup;
-  readonly vertices: WeakMap<Polygon, Marker[]>;
+  readonly vertices: WeakMap<Polygon, CircleMarker[]>;
+  /** Set while a vertex is being dragged, so no freehand stroke starts. */
+  draggingVertex: boolean;
   /** Pending `markers` event while `notifyAfterEditExit` is enabled. */
   deferredNotify: (() => void) | null;
 }

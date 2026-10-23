@@ -18,18 +18,21 @@ A full TypeScript rewrite with a modern toolchain, tests and a live demo.
   overlay, DOM listeners and mode classes, and re-enables map dragging.
 - Polygons are now children of the `DrawLayer` feature group.
 - `create()` returns `[]` instead of `undefined` when the layer isn't on a map.
+- Vertex handles are SVG circle markers instead of `DivIcon` markers, and are
+  only on the map in `EDIT` mode. The `.leaflet-edge.disabled` class is gone.
+- `strokeWidth` is deprecated in favour of `style.stroke.width`.
 - `markers` is no longer fired after a click that didn't draw anything.
 
 ### Added
 
 - Strict TypeScript source with typed `on`/`once`/`off` for the `markers` and
   `mode` events, plus exported `MarkersEvent`, `ModeEvent` and `Mode` types.
-- `DrawLayerOptions` accepts Leaflet `PathOptions` (`color`, `weight`, …). A
-  `className` option is appended to `leaflet-polygon`.
+- Typed `style` option: one accent `color` themes polygons, vertex handles and
+  the drawing stroke, with per-part overrides (`polygon`, `vertex`, `stroke`).
+  Change it at runtime with `layer.style({...})`. No CSS import is needed.
 - `create()` accepts `[lat, lng]` tuples.
 - `mode()` works before the layer is added to a map.
 - Several `DrawLayer` instances can share one map.
-- Optional stylesheet: `leaflet-draw-shapes/style.css`.
 - Interactive demo, published to GitHub Pages.
 - Test suite with Vitest, run in CI against Leaflet 1.8 and 1.9.
 - Releases publish to npm from GitHub Releases, with provenance.

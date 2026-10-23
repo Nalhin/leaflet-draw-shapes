@@ -10,5 +10,6 @@ Object.defineProperties(HTMLElement.prototype, {
 });
 
 afterEach(() => {
+  document.head.innerHTML = '';
   document.body.innerHTML = '';
 });
