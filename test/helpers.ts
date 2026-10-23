@@ -94,3 +94,55 @@ export function strokeWithTouch(map: Map, points: Point[]): void {
 export function types(events: ShapesEvent[]): string[] {
   return events.map((event) => event.type);
 }
+
+/**
+ * Dispatches a primary pointer event at container point `point`, then, like a
+ * browser, the compatibility mouse or touch event unless it was prevented.
+ */
+export function pointer(
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  point: Point,
+  target: EventTarget,
+  pointerType: 'mouse' | 'touch' = 'mouse',
+): void {
+  const position = { clientX: point.x, clientY: point.y };
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: type === 'pointermove' ? -1 : 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType,
+    ...position,
+  });
+  target.dispatchEvent(event);
+
+  if (pointerType === 'touch') {
+    const touch = new Event(compatibilityEvents.touch[type], { bubbles: true });
+    Object.defineProperty(touch, 'touches', {
+      value: type === 'pointerup' ? [] : [position],
+    });
+    target.dispatchEvent(touch);
+  } else if (!event.defaultPrevented) {
+    target.dispatchEvent(
+      new MouseEvent(compatibilityEvents.mouse[type], {
+        bubbles: true,
+        button: 0,
+        ...position,
+      }),
+    );
+  }
+}
+
+const compatibilityEvents = {
+  mouse: {
+    pointerdown: 'mousedown',
+    pointermove: 'mousemove',
+    pointerup: 'mouseup',
+  },
+  touch: {
+    pointerdown: 'touchstart',
+    pointermove: 'touchmove',
+    pointerup: 'touchend',
+  },
+} as const;

@@ -4,6 +4,7 @@ import {
   FeatureGroup,
   Handler,
   Marker,
+  type Map,
   Point,
   Polygon,
   type LatLng,
@@ -19,6 +20,7 @@ import {
 import {
   circlePoints,
   createMap,
+  pointer,
   setup,
   square,
   strokeWithMouse,
@@ -223,23 +225,24 @@ describe('DrawLayer', () => {
       const { map, layer } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
       const marker = vertexMarkers(layer)[0]!;
+      const container = map.getContainer();
       const visible = () => marker.options.opacity !== 0;
 
       expect(vertexMarkers(layer)).toHaveLength(4);
       expect(visible()).toBe(false);
       expect(marker.options.fillOpacity).toBe(0);
 
-      marker.fire('mouseover');
+      pointer('pointermove', new Point(352, 252), container);
       expect(visible()).toBe(true);
       expect(marker.options.fillOpacity).toBe(1);
 
-      marker.fire('mouseout');
+      pointer('pointermove', new Point(400, 300), container);
       expect(visible()).toBe(false);
 
-      // Stays visible while dragged, even when the pointer outruns it.
-      marker.fire('mouseover');
-      marker.fire('mousedown');
-      marker.fire('mouseout');
+      // Stays visible while dragged, even when the pointer leaves the map.
+      pointer('pointermove', new Point(350, 250), container);
+      pointer('pointerdown', new Point(350, 250), container);
+      container.dispatchEvent(new PointerEvent('pointerleave'));
       expect(visible()).toBe(true);
     });
 
@@ -823,53 +826,190 @@ describe('DrawLayer', () => {
   });
 
   describe('editing vertices', () => {
-    const drag = (layer: DrawLayer, marker: CircleMarker, to: Point) => {
-      const map = layer['_map'];
-      marker.fire('mousedown');
-      map.fire('mousemove', { latlng: map.containerPointToLatLng(to) });
-      map.fire('mouseup');
+    // The top-left corner of `square(map, 400, 300)`.
+    const corner = new Point(350, 250);
+
+    const drag = (
+      map: Map,
+      from: Point,
+      to: Point,
+      pointerType: 'mouse' | 'touch' = 'mouse',
+    ) => {
+      const container = map.getContainer();
+      pointer('pointerdown', from, container, pointerType);
+      pointer('pointermove', to, container, pointerType);
+      pointer('pointerup', to, container, pointerType);
     };
+
+    const domClick = (polygon: Polygon, at: Point) =>
+      polygon
+        .getElement()!
+        .dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            clientX: at.x,
+            clientY: at.y,
+          }),
+        );
+
+    const ringPoints = (map: Map, polygon: Polygon) =>
+      (polygon.getLatLngs()[0] as LatLng[]).map((latLng) =>
+        map.latLngToContainerPoint(latLng).round(),
+      );
 
     it('moves a vertex and fires shapes:edit', () => {
       const { map, layer, events } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
       events.length = 0;
-      drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
+      drag(map, corner, new Point(300, 200));
 
       expect(layer.getLayers()).toHaveLength(1);
-      const ring = (polygons(layer)[0]!.getLatLngs()[0] as LatLng[]).map(
-        (latLng) => map.latLngToContainerPoint(latLng).round(),
+      expect(ringPoints(map, polygons(layer)[0]!)).toContainEqual(
+        new Point(300, 200),
       );
-      expect(ring).toContainEqual(new Point(300, 200));
       expect(events).toMatchObject([
         { type: 'shapes:edit', layers: layer.getLayers() },
         { type: 'shapes:change' },
       ]);
     });
 
-    it('stops tracking the mouse after the drag ends', () => {
+    it('moves a vertex with touch', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+      drag(map, corner, new Point(300, 200), 'touch');
+
+      expect(ringPoints(map, polygons(layer)[0]!)).toContainEqual(
+        new Point(300, 200),
+      );
+      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
+    });
+
+    it('grabs a vertex near the pointer, keeping the offset', () => {
       const { map, layer } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
-      const marker = vertexMarkers(layer)[0]!;
-      drag(layer, marker, new Point(300, 200));
+      drag(map, new Point(355, 254), new Point(305, 204));
+
+      expect(ringPoints(map, polygons(layer)[0]!)).toContainEqual(
+        new Point(300, 200),
+      );
+    });
+
+    it('grabs from further away with touch than with a mouse', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+
+      drag(map, new Point(365, 250), new Point(315, 200));
+      expect(events).toHaveLength(0);
+
+      drag(map, new Point(365, 250), new Point(315, 200), 'touch');
+      expect(ringPoints(map, polygons(layer)[0]!)).toContainEqual(
+        new Point(300, 200),
+      );
+    });
+
+    it('grabs vertices covered by polygons drawn later', () => {
+      const { map, layer } = setup({ mode: EDIT, mergePolygons: false });
+      layer.addPolygon(square(map, 400, 300));
+      const [cover] = layer.addPolygon(square(map, 350, 250, 40));
+      // Pressing the part of the handle under the second polygon.
+      drag(map, new Point(352, 252), new Point(302, 202));
+      expect(
+        polygons(layer).some((polygon) =>
+          ringPoints(map, polygon).some((point) =>
+            point.equals(new Point(300, 200)),
+          ),
+        ),
+      ).toBe(true);
+      expect(ringPoints(map, cover!)).not.toContainEqual(new Point(300, 200));
+    });
+
+    it('draws vertex handles above polygons', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      drag(map, corner, new Point(300, 200));
+
+      const pane = map.getPane('drawShapesVertexPane')!;
+      // Leaflet's stylesheet puts `overlayPane` at 400.
+      expect(Number(pane.style.zIndex)).toBeGreaterThan(400);
+      for (const marker of vertexMarkers(layer)) {
+        expect(pane.contains(marker.getElement()!)).toBe(true);
+      }
+      expect(pane.querySelector('.leaflet-draw-shapes-polygon')).toBeNull();
+    });
+
+    it('leaves the polygon alone when a vertex is clicked without moving', () => {
+      const { map, layer, events } = setup({ mode: ALL });
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      const before = polygon!.getLatLngs();
+      events.length = 0;
+
+      drag(map, corner, new Point(351, 251));
+      // The click ending the press must not append a vertex or delete.
+      domClick(polygon!, new Point(351, 251));
+
+      expect(layer.getLayers()).toEqual([polygon]);
+      expect(polygon!.getLatLngs()).toEqual(before);
+      expect(events).toHaveLength(0);
+    });
+
+    it('lets clicks through again after the next press', () => {
+      const { map, layer } = setup({ mode: DELETE | EDIT });
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      drag(map, corner, corner);
+
+      pointer('pointerdown', new Point(400, 300), polygon!.getElement()!);
+      domClick(polygon!, new Point(400, 300));
+      expect(layer.getLayers()).toHaveLength(0);
+    });
+
+    it('stops tracking the pointer after the drag ends', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      drag(map, corner, new Point(300, 200));
 
       const before = polygons(layer)[0]!.getLatLngs();
-      map.fire('mousemove', {
-        latlng: map.containerPointToLatLng(new Point(10, 10)),
-      });
+      pointer('pointermove', new Point(10, 10), map.getContainer());
       expect(polygons(layer)[0]!.getLatLngs()).toEqual(before);
+    });
+
+    it('ends the drag when the pointer is released outside the map', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+      pointer('pointerdown', corner, map.getContainer());
+      pointer('pointermove', new Point(300, 200), document.body);
+      pointer('pointerup', new Point(300, 200), document.body);
+
+      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
+      expect(map.dragging.enabled()).toBe(true);
     });
 
     it('is ignored outside EDIT mode', () => {
       const { map, layer, events } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
-      const marker = vertexMarkers(layer)[0]!;
       layer.setMode(DELETE);
       const before = polygons(layer)[0]!.getLatLngs();
       events.length = 0;
-      drag(layer, marker, new Point(300, 200));
+      drag(map, corner, new Point(300, 200));
 
       expect(polygons(layer)[0]!.getLatLngs()).toEqual(before);
+      expect(events).toHaveLength(0);
+    });
+
+    it('ignores presses on controls', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+      const control = map
+        .getContainer()
+        .querySelector('.leaflet-control-container')!;
+      drag(map, corner, new Point(300, 200));
+      events.length = 0;
+      pointer('pointerdown', new Point(300, 200), control);
+      pointer('pointermove', new Point(250, 150), control);
+      pointer('pointerup', new Point(250, 150), control);
       expect(events).toHaveLength(0);
     });
 
@@ -880,8 +1020,8 @@ describe('DrawLayer', () => {
       });
       layer.addPolygon(square(map, 400, 300));
       events.length = 0;
-      drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
-      drag(layer, vertexMarkers(layer)[1]!, new Point(500, 200));
+      drag(map, corner, new Point(300, 200));
+      drag(map, new Point(450, 250), new Point(500, 200));
       expect(events).toHaveLength(0);
 
       layer.setMode(NONE);
@@ -898,49 +1038,51 @@ describe('DrawLayer', () => {
       });
       layer.addPolygon(square(map, 400, 300));
       events.length = 0;
-      drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
+      drag(map, corner, new Point(300, 200));
       layer.remove();
       expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
     });
 
-    it('re-enables map dragging after the drag unless in CREATE mode', () => {
-      const { map, layer } = setup({ mode: EDIT });
+    it('keeps a drag in progress when the layer is removed', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
-      const marker = vertexMarkers(layer)[0]!;
-      marker.fire('mousedown');
-      expect(map.dragging.enabled()).toBe(false);
-      map.fire('mouseup');
+      events.length = 0;
+      pointer('pointerdown', corner, map.getContainer());
+      pointer('pointermove', new Point(300, 200), map.getContainer());
+      layer.remove();
+
+      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
       expect(map.dragging.enabled()).toBe(true);
     });
 
-    it('does not start a freehand stroke when grabbing a vertex in CREATE | EDIT mode', () => {
-      const { map, layer, events } = setup({ mode: CREATE | EDIT });
+    it('disables map dragging during the drag unless in CREATE mode', () => {
+      const { map, layer } = setup({ mode: EDIT });
       layer.addPolygon(square(map, 400, 300));
-      events.length = 0;
-      const icon = vertexMarkers(layer)[0]!.getElement()!;
-
-      const container = map.getContainer();
-      icon.dispatchEvent(
-        new MouseEvent('mousedown', {
-          bubbles: true,
-          clientX: 350,
-          clientY: 250,
-        }),
-      );
-      container.dispatchEvent(
-        new MouseEvent('mousemove', {
-          bubbles: true,
-          clientX: 300,
-          clientY: 200,
-        }),
-      );
-
-      expect(
-        container.querySelector('path.leaflet-draw-shapes-sketch'),
-      ).toBeNull();
-      container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
+      pointer('pointerdown', corner, map.getContainer());
+      expect(map.dragging.enabled()).toBe(false);
+      pointer('pointerup', corner, map.getContainer());
+      expect(map.dragging.enabled()).toBe(true);
     });
+
+    it.each(['mouse', 'touch'] as const)(
+      'does not start a freehand stroke when grabbing a vertex in CREATE | EDIT mode (%s)',
+      (pointerType) => {
+        const { map, layer, events } = setup({ mode: CREATE | EDIT });
+        layer.addPolygon(square(map, 400, 300));
+        events.length = 0;
+        const container = map.getContainer();
+
+        pointer('pointerdown', corner, container, pointerType);
+        pointer('pointermove', new Point(300, 200), container, pointerType);
+        expect(
+          container.querySelector('path.leaflet-draw-shapes-sketch'),
+        ).toBeNull();
+        pointer('pointerup', new Point(300, 200), container, pointerType);
+
+        expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
+        expect(layer.getLayers()).toHaveLength(1);
+      },
+    );
   });
 
   describe('removal from the map', () => {

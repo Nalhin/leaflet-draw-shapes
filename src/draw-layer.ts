@@ -37,7 +37,12 @@ import {
   resolveStyle,
   type DrawLayerStyle,
 } from './style';
-import { syncVertexVisibility, vertexAppearance } from './vertices';
+import {
+  enableVertexDragging,
+  syncVertexVisibility,
+  vertexAppearance,
+  type VertexDraggingHandle,
+} from './vertices';
 
 interface QueuedPolygon {
   latLngs: LatLng[];
@@ -87,6 +92,7 @@ export class DrawLayer extends FeatureGroup {
   // `DrawLayer.extend()` subclasses would skip.
   declare private _context: DrawContext;
   declare private _freehand: FreehandHandle | null;
+  declare private _vertexDragging: VertexDraggingHandle | null;
   declare private _queue: QueuedPolygon[];
   declare private _batchDepth: number;
   declare private _changed: boolean;
@@ -112,6 +118,7 @@ export class DrawLayer extends FeatureGroup {
       commit: (type, change, defer) => this._commit(type, change, defer),
     };
     this._freehand = null;
+    this._vertexDragging = null;
     this._queue = [];
     this._batchDepth = 0;
     this._changed = false;
@@ -140,6 +147,8 @@ export class DrawLayer extends FeatureGroup {
     this._freehand = enableFreehand(context, map, (latLngs) => {
       this._onStroke(latLngs);
     });
+    // Before `_applyMode()`, which adds the handles to the pane this creates.
+    this._vertexDragging = enableVertexDragging(context, map);
     this._applyMode();
 
     const queue = this._queue.splice(0);
@@ -155,6 +164,9 @@ export class DrawLayer extends FeatureGroup {
 
   /** Takes the shapes off the map but keeps them, like any `FeatureGroup`. */
   override onRemove(map: Map): this {
+    // Finishing a drag in progress may queue an edit to flush.
+    this._vertexDragging?.dispose();
+    this._vertexDragging = null;
     this._flushEdits();
     this._freehand?.dispose();
     this._freehand = null;
