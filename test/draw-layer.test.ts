@@ -1,69 +1,123 @@
-import { CircleMarker, Point, Polygon, type LatLng } from 'leaflet';
+import {
+  CircleMarker,
+  Control,
+  FeatureGroup,
+  Handler,
+  Marker,
+  Point,
+  Polygon,
+  type LatLng,
+} from 'leaflet';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  ALL,
-  APPEND,
-  CREATE,
-  DELETE,
   DrawLayer,
-  EDIT,
-  NONE,
-  defaultOptions,
+  Mode,
   drawLayer,
-  type ModeEvent,
+  type ModeChangeEvent,
+  type ShapesEvent,
 } from '../src';
 import {
   circlePoints,
+  createMap,
   setup,
   square,
   strokeWithMouse,
   strokeWithTouch,
+  types,
 } from './helpers';
+
+const { NONE, CREATE, EDIT, DELETE, APPEND, ALL } = Mode;
 
 const vertexMarkers = (layer: DrawLayer): CircleMarker[] => {
   const markers: CircleMarker[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reach the map's layers
-  layer['_map'].eachLayer((l: any) => {
+  layer['_map'].eachLayer((l) => {
     if (l instanceof CircleMarker) markers.push(l);
   });
   return markers;
 };
 
+const polygons = (layer: DrawLayer): Polygon[] =>
+  layer.getLayers().filter((l): l is Polygon => l instanceof Polygon);
+
 describe('DrawLayer', () => {
   describe('construction', () => {
-    it('merges options with the defaults', () => {
-      const layer = new DrawLayer({ maximumPolygons: 2 });
+    it('reads defaults from the prototype', () => {
+      const layer = new DrawLayer({ maxPolygons: 2 });
       expect(layer.options).toMatchObject({
-        ...defaultOptions,
-        maximumPolygons: 2,
+        mode: ALL,
+        appendTolerance: 10,
+        mergePolygons: true,
+        concaveHull: true,
+        maxPolygons: 2,
       });
+      expect(Object.hasOwn(layer.options, 'appendTolerance')).toBe(false);
     });
 
     it('exposes a factory', () => {
       expect(drawLayer()).toBeInstanceOf(DrawLayer);
     });
 
-    it('is a no-op before being added to a map', () => {
+    it('is safe to use before being added to a map', () => {
       const layer = new DrawLayer();
-      expect(
-        layer.create([
-          [0, 0],
-          [1, 1],
-          [0, 1],
-        ]),
-      ).toEqual([]);
-      expect(layer.size()).toBe(0);
-      expect(layer.all()).toEqual([]);
       expect(() => {
-        layer.clear();
+        layer.clearLayers();
         layer.cancel();
       }).not.toThrow();
     });
   });
 
+  describe('Leaflet class conventions', () => {
+    it('mergeOptions() changes the defaults of DrawLayer only', () => {
+      const Sub = DrawLayer.extend({}) as typeof DrawLayer;
+      Sub.mergeOptions({ appendTolerance: 99 });
+      expect(new Sub().options.appendTolerance).toBe(99);
+      expect(new DrawLayer().options.appendTolerance).toBe(10);
+      expect('appendTolerance' in new FeatureGroup().options).toBe(false);
+    });
+
+    it('addInitHook() runs for DrawLayer only, after initialisation', () => {
+      const Sub = DrawLayer.extend({}) as typeof DrawLayer;
+      const hook = vi.fn(function (this: DrawLayer) {
+        expect(this.getMode()).toBe(EDIT);
+      });
+      Sub.addInitHook(hook);
+
+      new Sub({ mode: EDIT });
+      new FeatureGroup();
+      new DrawLayer();
+      expect(hook).toHaveBeenCalledOnce();
+    });
+
+    it('supports Leaflet-style subclasses with extend()', () => {
+      const Sub = DrawLayer.extend({
+        greet() {
+          return 'hi';
+        },
+      }) as new (
+        ...args: ConstructorParameters<typeof DrawLayer>
+      ) => DrawLayer & { greet(): string };
+      const layer = new Sub({ mode: EDIT });
+      const map = createMap();
+      layer.addTo(map);
+
+      expect(layer).toBeInstanceOf(DrawLayer);
+      expect(layer.greet()).toBe('hi');
+      expect(layer.getMode()).toBe(EDIT);
+      expect(layer.addPolygon(square(map, 400, 300))).toHaveLength(1);
+    });
+
+    it('supports ES subclasses', () => {
+      class Sub extends DrawLayer {}
+      const map = createMap();
+      const layer = new Sub({ mode: EDIT }).addTo(map);
+      expect(layer.getMode()).toBe(EDIT);
+      expect(layer.addPolygon(square(map, 400, 300))).toHaveLength(1);
+    });
+  });
+
   describe('style', () => {
     /** Starts and releases a stroke, reading an attribute of its SVG path. */
-    const strokeAttribute = (map: DrawLayer['_map'], name: string) => {
+    const sketchAttribute = (map: DrawLayer['_map'], name: string) => {
       const container = map.getContainer();
       container.dispatchEvent(
         new MouseEvent('mousedown', {
@@ -73,7 +127,7 @@ describe('DrawLayer', () => {
         }),
       );
       const value = container
-        .querySelector('path.leaflet-line')
+        .querySelector('path.leaflet-draw-shapes-sketch')
         ?.getAttribute(name);
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       return value;
@@ -81,9 +135,9 @@ describe('DrawLayer', () => {
 
     it('works without any configuration or CSS', () => {
       const { map, layer } = setup({ mode: ALL });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
 
-      expect(layer.all()[0]!.options).toMatchObject({
+      expect(polygons(layer)[0]!.options).toMatchObject({
         color: '#3388ff',
         smoothFactor: 0.3,
       });
@@ -95,64 +149,79 @@ describe('DrawLayer', () => {
       expect(document.querySelectorAll('style, link')).toHaveLength(0);
     });
 
-    it('themes polygons, vertices and the stroke with one colour', () => {
+    it('themes polygons, vertices and the sketch with one colour', () => {
       const { map, layer } = setup({ style: { color: 'tomato' } });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
 
-      expect(layer.all()[0]!.options.color).toBe('tomato');
+      expect(polygons(layer)[0]!.options.color).toBe('tomato');
       expect(vertexMarkers(layer)[0]!.options.color).toBe('tomato');
-      expect(strokeAttribute(map, 'stroke')).toBe('tomato');
+      expect(sketchAttribute(map, 'stroke')).toBe('tomato');
     });
 
-    it('lets each part override the accent colour', () => {
+    it('takes polygon path options at the top level, and per-part overrides', () => {
       const { map, layer } = setup({
         style: {
           color: 'tomato',
-          polygon: {
-            color: 'navy',
-            fillOpacity: 0.5,
-            smoothFactor: 1,
-            className: 'mine',
-          },
-          vertex: { radius: 8 },
-          stroke: { color: 'lime', width: 4, dashArray: '4 4' },
+          fillOpacity: 0.5,
+          smoothFactor: 1,
+          className: 'mine',
+          vertex: { color: 'navy', radius: 8 },
+          sketch: { color: 'lime', width: 4, dashArray: '4 4' },
         },
       });
-      const [polygon] = layer.create(square(map, 400, 300));
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
 
       expect(polygon!.options).toMatchObject({
-        color: 'navy',
+        color: 'tomato',
         fillOpacity: 0.5,
         smoothFactor: 1,
       });
       expect(polygon!.getElement()?.getAttribute('class')).toContain(
-        'leaflet-polygon mine',
+        'leaflet-draw-shapes-polygon mine',
       );
       expect(vertexMarkers(layer)[0]!.options).toMatchObject({
-        color: 'tomato',
+        color: 'navy',
         radius: 8,
       });
-      expect(strokeAttribute(map, 'stroke')).toBe('lime');
-      expect(strokeAttribute(map, 'stroke-width')).toBe('4');
-      expect(strokeAttribute(map, 'stroke-dasharray')).toBe('4 4');
+      expect(sketchAttribute(map, 'stroke')).toBe('lime');
+      expect(sketchAttribute(map, 'stroke-width')).toBe('4');
+      expect(sketchAttribute(map, 'stroke-dasharray')).toBe('4 4');
     });
 
-    it('style() updates existing polygons and vertices', () => {
+    it('setStyle() updates existing and new polygons and vertices', () => {
       const { map, layer } = setup();
-      layer.create(square(map, 400, 300));
-      const returned = layer.style({ color: 'gold', vertex: { radius: 9 } });
+      layer.addPolygon(square(map, 200, 300));
+      expect(layer.setStyle({ color: 'gold', vertex: { radius: 9 } })).toBe(
+        layer,
+      );
+      layer.addPolygon(square(map, 600, 300));
 
-      expect(returned.color).toBe('gold');
-      expect(layer.all()[0]!.options.color).toBe('gold');
-      expect(vertexMarkers(layer)[0]!.getRadius()).toBe(9);
-      expect(vertexMarkers(layer)[0]!.options.color).toBe('gold');
+      for (const polygon of polygons(layer)) {
+        expect(polygon.options.color).toBe('gold');
+      }
+      for (const marker of vertexMarkers(layer)) {
+        expect(marker.getRadius()).toBe(9);
+        expect(marker.options.color).toBe('gold');
+      }
+      expect(layer.getStyle().color).toBe('gold');
       // Earlier settings are kept.
-      expect(layer.style().vertex?.fillColor).toBe('#fff');
+      expect(layer.getStyle().vertex?.fillColor).toBe('#fff');
+    });
+
+    it('setStyle() keeps the polygon class', () => {
+      const { map, layer } = setup();
+      layer.addPolygon(square(map, 400, 300));
+      layer.setStyle({ className: 'other' });
+      layer.remove().addTo(map);
+
+      expect(
+        map.getContainer().querySelector('.leaflet-draw-shapes-polygon'),
+      ).not.toBeNull();
     });
 
     it('keeps vertex handles invisible until hovered or dragged', () => {
       const { map, layer } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       const marker = vertexMarkers(layer)[0]!;
       const visible = () => marker.options.opacity !== 0;
 
@@ -179,17 +248,17 @@ describe('DrawLayer', () => {
         mode: EDIT,
         style: { showVertices: 'always' },
       });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       expect(vertexMarkers(layer)[0]!.options).toMatchObject({
         opacity: 1,
         fillOpacity: 1,
       });
     });
 
-    it('style() keeps hidden handles hidden', () => {
+    it('setStyle() keeps hidden handles hidden', () => {
       const { map, layer } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
-      layer.style({ color: 'gold' });
+      layer.addPolygon(square(map, 400, 300));
+      layer.setStyle({ color: 'gold' });
       expect(vertexMarkers(layer)[0]!.options).toMatchObject({
         color: 'gold',
         opacity: 0,
@@ -197,27 +266,21 @@ describe('DrawLayer', () => {
     });
 
     it('ignores undefined values instead of clearing defaults', () => {
-      const layer = new DrawLayer({ style: { stroke: { width: undefined } } });
-      expect(layer.resolvedStyle().stroke.width).toBe(2);
+      const layer = new DrawLayer({ style: { sketch: { width: undefined } } });
+      expect(layer.getStyle().sketch?.width).toBe(2);
     });
   });
 
-  describe('create()', () => {
-    it('adds a polygon and fires a closed ring', () => {
+  describe('addPolygon()', () => {
+    it('adds a polygon and fires shapes:change', () => {
       const { map, layer, events } = setup();
-      const created = layer.create(square(map, 400, 300));
+      const created = layer.addPolygon(square(map, 400, 300));
 
       expect(created).toHaveLength(1);
       expect(created[0]).toBeInstanceOf(Polygon);
-      expect(layer.size()).toBe(1);
-      expect(layer.all()).toEqual(created);
-
-      expect(events).toHaveLength(1);
-      const [event] = events;
-      expect(event!.eventType).toBe('create');
-      const ring = event!.latLngs[0]!;
-      expect(ring).toHaveLength(5);
-      expect(ring[0]).toBe(ring.at(-1));
+      expect(layer.getLayers()).toEqual(created);
+      expect(types(events)).toEqual(['shapes:change']);
+      expect(events[0]!.layers).toEqual(created);
     });
 
     it('accepts [lat, lng] tuples', () => {
@@ -225,12 +288,12 @@ describe('DrawLayer', () => {
       const tuples = square(map, 400, 300).map(
         ({ lat, lng }) => [lat, lng] as [number, number],
       );
-      expect(layer.create(tuples)).toHaveLength(1);
+      expect(layer.addPolygon(tuples)).toHaveLength(1);
     });
 
     it('makes polygons available through the FeatureGroup API', () => {
       const { map, layer } = setup();
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
 
       const geoJSON = layer.toGeoJSON() as GeoJSON.FeatureCollection;
       expect(geoJSON.features).toHaveLength(1);
@@ -247,46 +310,72 @@ describe('DrawLayer', () => {
         [300, 400],
       ].map(([x, y]) => map.containerPointToLatLng(new Point(x!, y!)));
 
-      expect(layer.create(bowtie)).toHaveLength(2);
+      expect(layer.addPolygon(bowtie)).toHaveLength(2);
     });
 
     it('merges overlapping polygons', () => {
       const { map, layer } = setup();
-      const [first] = layer.create(square(map, 300, 300));
-      const merged = layer.create(square(map, 350, 300));
+      const [first] = layer.addPolygon(square(map, 300, 300));
+      const merged = layer.addPolygon(square(map, 350, 300));
 
-      expect(layer.size()).toBe(1);
       expect(merged).toHaveLength(1);
-      expect(layer.all()).toEqual(merged);
+      expect(layer.getLayers()).toEqual(merged);
       expect(layer.hasLayer(first!)).toBe(false);
+    });
+
+    it('fires one shapes:change for a merge', () => {
+      const { map, layer, events } = setup();
+      layer.addPolygon(square(map, 300, 300));
+      layer.addPolygon(square(map, 350, 300));
+      expect(types(events)).toEqual(['shapes:change', 'shapes:change']);
+      expect(events[1]!.layers).toHaveLength(1);
     });
 
     it('returns the new polygon when it does not overlap anything', () => {
       const { map, layer } = setup();
-      layer.create(square(map, 200, 300));
-      const created = layer.create(square(map, 600, 300));
+      layer.addPolygon(square(map, 200, 300));
+      const created = layer.addPolygon(square(map, 600, 300));
 
-      expect(layer.size()).toBe(2);
+      expect(layer.getLayers()).toHaveLength(2);
       expect(created).toHaveLength(1);
     });
 
     it('keeps overlapping polygons apart when merging is disabled', () => {
       const { map, layer } = setup({ mergePolygons: false });
-      layer.create(square(map, 300, 300));
-      layer.create(square(map, 350, 300));
-      expect(layer.size()).toBe(2);
+      layer.addPolygon(square(map, 300, 300));
+      layer.addPolygon(square(map, 350, 300));
+      expect(layer.getLayers()).toHaveLength(2);
     });
 
-    it('respects maximumPolygons', () => {
-      const { map, layer } = setup({ maximumPolygons: 2 });
-      layer.create(square(map, 100, 100));
-      layer.create(square(map, 300, 100));
-      expect(layer.create(square(map, 500, 100))).toEqual([]);
-      expect(layer.size()).toBe(2);
+    it('takes per-call options without losing the concave hull default', () => {
+      const { map, layer } = setup();
+      layer.addPolygon(square(map, 300, 300));
+      layer.addPolygon(square(map, 350, 300), { mergePolygons: false });
+      expect(layer.getLayers()).toHaveLength(2);
+
+      // The concave hull would turn this L shape into something else.
+      const lShape = [
+        [100, 100],
+        [300, 100],
+        [300, 150],
+        [150, 150],
+        [150, 300],
+        [100, 300],
+      ].map(([x, y]) => map.containerPointToLatLng(new Point(x!, y!)));
+      const [polygon] = layer.addPolygon(lShape, { maxPolygons: 10 });
+      expect(polygon!.getLatLngs()[0]).toHaveLength(6);
     });
 
-    it('respects maximumPolygons when a shape splits into several', () => {
-      const { map, layer } = setup({ maximumPolygons: 1 });
+    it('respects maxPolygons', () => {
+      const { map, layer } = setup({ maxPolygons: 2 });
+      layer.addPolygon(square(map, 100, 100));
+      layer.addPolygon(square(map, 300, 100));
+      expect(layer.addPolygon(square(map, 500, 100))).toEqual([]);
+      expect(layer.getLayers()).toHaveLength(2);
+    });
+
+    it('respects maxPolygons when a shape splits into several', () => {
+      const { map, layer } = setup({ maxPolygons: 1 });
       const bowtie = [
         [300, 200],
         [500, 400],
@@ -294,95 +383,239 @@ describe('DrawLayer', () => {
         [300, 400],
       ].map(([x, y]) => map.containerPointToLatLng(new Point(x!, y!)));
 
-      expect(layer.create(bowtie)).toHaveLength(1);
-      expect(layer.size()).toBe(1);
+      expect(layer.addPolygon(bowtie)).toHaveLength(1);
+      expect(layer.getLayers()).toHaveLength(1);
     });
 
     it('adds a vertex marker per polygon corner', () => {
       const { map, layer } = setup();
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       expect(vertexMarkers(layer)).toHaveLength(4);
+    });
+
+    it('queues shapes added before the layer is on a map', () => {
+      const map = createMap();
+      const layer = new DrawLayer();
+      const listener = vi.fn<(event: ShapesEvent) => void>();
+      layer.on('shapes:change', listener);
+
+      expect(layer.addPolygon(square(map, 300, 300))).toEqual([]);
+      layer.addPolygon(square(map, 350, 300));
+      expect(layer.getLayers()).toHaveLength(0);
+
+      layer.addTo(map);
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(listener).toHaveBeenCalledOnce();
     });
   });
 
-  describe('removePolygon() and clear()', () => {
-    it('removes a polygon with its vertices', () => {
-      const { map, layer, events } = setup();
-      const [polygon] = layer.create(square(map, 400, 300));
-      layer.removePolygon(polygon!);
+  describe('addData()', () => {
+    const feature = (
+      coordinates: number[][][],
+    ): GeoJSON.Feature<GeoJSON.Polygon> => ({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Polygon', coordinates },
+    });
+    const ring = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 0],
+    ];
 
-      expect(layer.size()).toBe(0);
-      expect(vertexMarkers(layer)).toHaveLength(0);
-      expect(events.at(-1)?.eventType).toBe('remove');
+    it('adds polygons exactly as given, before the layer is on a map', () => {
+      const layer = new DrawLayer();
+      layer.addData({
+        type: 'FeatureCollection',
+        features: [
+          feature([ring]),
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'MultiPolygon',
+              coordinates: [[ring], [ring.map(([x, y]) => [x! + 5, y!])]],
+            },
+          },
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [0, 0] },
+          },
+        ],
+      });
+
+      expect(layer.getLayers()).toHaveLength(3);
+      const [first] = polygons(layer);
+      expect(first!.getLatLngs()[0]).toHaveLength(3);
+      expect(layer.toGeoJSON()).toMatchObject({
+        features: [{ geometry: { coordinates: [ring] } }, {}, {}],
+      });
     });
 
-    it('clears every polygon', () => {
-      const { map, layer, events } = setup();
-      layer.create(square(map, 200, 300));
-      layer.create(square(map, 600, 300));
-      layer.clear();
+    it('ignores holes', () => {
+      const layer = new DrawLayer().addData(
+        feature([ring, ring.map(([x, y]) => [x! / 2, y! / 2])]),
+      );
+      expect(polygons(layer)[0]!.getLatLngs()).toHaveLength(1);
+    });
 
-      expect(layer.size()).toBe(0);
+    it('makes the polygons editable once on a map', () => {
+      const map = createMap();
+      const layer = new DrawLayer({ mode: EDIT }).addData(feature([ring]));
+      layer.addTo(map);
+      expect(vertexMarkers(layer)).toHaveLength(3);
+    });
+
+    it('respects maxPolygons and fires one shapes:change', () => {
+      const { layer, events } = setup({ maxPolygons: 1 });
+      layer.addData([feature([ring]), feature([ring])]);
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(types(events)).toEqual(['shapes:change']);
+    });
+  });
+
+  describe('FeatureGroup methods', () => {
+    it('removeLayer() removes a polygon with its vertices', () => {
+      const { map, layer, events } = setup();
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      layer.removeLayer(polygon!);
+
+      expect(layer.getLayers()).toHaveLength(0);
       expect(vertexMarkers(layer)).toHaveLength(0);
-      expect(events.at(-1)).toMatchObject({ eventType: 'clear', latLngs: [] });
+      expect(events.at(-1)).toMatchObject({
+        type: 'shapes:change',
+        layers: [],
+      });
+    });
+
+    it('removeLayer() accepts a layer id', () => {
+      const { map, layer } = setup();
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      layer.removeLayer(layer.getLayerId(polygon!));
+      expect(vertexMarkers(layer)).toHaveLength(0);
+    });
+
+    it('clearLayers() removes every polygon and vertex with one event', () => {
+      const { map, layer, events } = setup();
+      layer.addPolygon(square(map, 200, 300));
+      layer.addPolygon(square(map, 600, 300));
+      events.length = 0;
+      layer.clearLayers();
+
+      expect(layer.getLayers()).toHaveLength(0);
+      expect(vertexMarkers(layer)).toHaveLength(0);
+      expect(events).toMatchObject([{ type: 'shapes:change', layers: [] }]);
+    });
+
+    it('addLayer() makes a polygon editable and keeps its style', () => {
+      const { map, layer, events } = setup({ mode: EDIT | DELETE });
+      const polygon = new Polygon(square(map, 400, 300), { color: 'red' });
+      layer.addLayer(polygon);
+
+      expect(vertexMarkers(layer)).toHaveLength(4);
+      expect(polygon.options.color).toBe('red');
+      expect(polygon.getElement()?.classList).toContain(
+        'leaflet-draw-shapes-polygon',
+      );
+      expect(types(events)).toEqual(['shapes:change']);
+
+      polygon.fire('click', {
+        containerPoint: new Point(400, 300),
+        latlng: map.containerPointToLatLng(new Point(400, 300)),
+      });
+      expect(layer.hasLayer(polygon)).toBe(false);
+    });
+
+    it('addLayer() leaves other layers alone', () => {
+      const { map, layer, events } = setup();
+      layer.addLayer(new Marker(map.getCenter()));
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(events).toHaveLength(0);
     });
   });
 
   describe('modes', () => {
     it('defaults to ALL', () => {
-      expect(new DrawLayer().mode()).toBe(ALL);
+      expect(new DrawLayer().getMode()).toBe(ALL);
     });
 
     it('can be set before the layer is added to a map', () => {
       const layer = new DrawLayer();
-      expect(layer.mode(EDIT)).toBe(EDIT);
-      expect(layer.mode()).toBe(EDIT);
+      expect(layer.setMode(EDIT)).toBe(layer);
+      expect(layer.getMode()).toBe(EDIT);
+      expect(layer.options.mode).toBe(EDIT);
     });
 
-    it('fires a mode event', () => {
-      const { layer } = setup();
-      const listener = vi.fn<(event: ModeEvent) => void>();
-      layer.on('mode', listener);
-      layer.mode(DELETE);
-      expect(listener).toHaveBeenCalledWith(
-        expect.objectContaining({ mode: DELETE }),
+    it('fires shapes:modechange on the layer and the map', () => {
+      const { map, layer } = setup();
+      const onLayer = vi.fn<(event: ModeChangeEvent) => void>();
+      const onMap = vi.fn<(event: ModeChangeEvent) => void>();
+      layer.on('shapes:modechange', onLayer);
+      map.on('shapes:modechange', onMap);
+
+      layer.setMode(DELETE);
+      layer.setMode(DELETE);
+      expect(onLayer).toHaveBeenCalledOnce();
+      expect(onLayer).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: DELETE, target: layer }),
+      );
+      expect(onMap).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: DELETE, sourceTarget: layer }),
       );
     });
 
-    it('reflects the mode in container classes', () => {
+    it('exposes each flag as a Leaflet handler', () => {
+      const layer = new DrawLayer({ mode: NONE });
+      expect(layer.editing).toBeInstanceOf(Handler);
+
+      layer.editing.enable();
+      layer.deleting.enable();
+      expect(layer.getMode()).toBe(EDIT | DELETE);
+      expect(layer.editing.enabled()).toBe(true);
+      expect(layer.drawing.enabled()).toBe(false);
+
+      layer.editing.disable();
+      expect(layer.getMode()).toBe(DELETE);
+      expect(layer.editing.enabled()).toBe(false);
+      expect(layer.appending.enabled()).toBe(false);
+    });
+
+    it('reflects the mode in prefixed container classes', () => {
       const { map, layer } = setup({ mode: CREATE | DELETE });
       const { classList } = map.getContainer();
-      expect(classList.contains('mode-create')).toBe(true);
-      expect(classList.contains('mode-delete')).toBe(true);
-      expect(classList.contains('mode-edit')).toBe(false);
+      expect(classList.contains('leaflet-draw-shapes-mode-create')).toBe(true);
+      expect(classList.contains('leaflet-draw-shapes-mode-delete')).toBe(true);
+      expect(classList.contains('leaflet-draw-shapes-mode-edit')).toBe(false);
 
-      layer.mode(NONE);
-      expect(classList.contains('mode-create')).toBe(false);
-      expect(classList.contains('mode-none')).toBe(true);
+      layer.setMode(NONE);
+      expect(classList.contains('leaflet-draw-shapes-mode-create')).toBe(false);
+      expect(classList.contains('leaflet-draw-shapes-mode-none')).toBe(true);
     });
 
     it('disables map dragging in CREATE mode', () => {
       const { map, layer } = setup({ mode: CREATE });
       expect(map.dragging.enabled()).toBe(false);
-      layer.mode(EDIT);
+      layer.setMode(EDIT);
       expect(map.dragging.enabled()).toBe(true);
     });
 
     it('does not enable dragging on maps created without it', () => {
       const { map, layer } = setup({ mode: CREATE }, { dragging: false });
-      layer.mode(EDIT);
+      layer.setMode(EDIT);
       expect(map.dragging.enabled()).toBe(false);
     });
 
     it('shows vertices only in EDIT mode', () => {
       const { map, layer } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       expect(vertexMarkers(layer)).toHaveLength(4);
 
-      layer.mode(CREATE);
+      layer.setMode(CREATE);
       expect(vertexMarkers(layer)).toHaveLength(0);
 
-      layer.mode(EDIT);
+      layer.setMode(EDIT);
       expect(vertexMarkers(layer)).toHaveLength(4);
     });
 
@@ -390,7 +623,7 @@ describe('DrawLayer', () => {
       const { map, layer } = setup({ mode: CREATE });
       const { classList } = map.getContainer();
       expect(classList.contains('leaflet-crosshair')).toBe(true);
-      layer.mode(EDIT);
+      layer.setMode(EDIT);
       expect(classList.contains('leaflet-crosshair')).toBe(false);
     });
   });
@@ -400,18 +633,34 @@ describe('DrawLayer', () => {
       const { map, layer, events } = setup({ mode: CREATE });
       strokeWithMouse(map, circlePoints(400, 300, 100));
 
-      expect(layer.size()).toBe(1);
-      expect(events.at(-1)?.eventType).toBe('create');
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(types(events)).toEqual(['shapes:create', 'shapes:change']);
+      expect(events[0]!.layers).toEqual(layer.getLayers());
+    });
+
+    it('fires shapes events on the map too', () => {
+      const { map, layer } = setup({ mode: CREATE });
+      const listener = vi.fn<(event: ShapesEvent) => void>();
+      map.on('shapes:create', listener);
+      strokeWithMouse(map, circlePoints(400, 300, 100));
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: map,
+          sourceTarget: layer,
+          layers: layer.getLayers(),
+        }),
+      );
     });
 
     it('creates a polygon from a touch stroke', () => {
       const { map, layer } = setup({ mode: CREATE });
       strokeWithTouch(map, circlePoints(400, 300, 100));
-      expect(layer.size()).toBe(1);
+      expect(layer.getLayers()).toHaveLength(1);
     });
 
-    it('draws the stroke on an SVG overlay and clears it afterwards', () => {
-      const { map } = setup({ mode: CREATE, style: { stroke: { width: 5 } } });
+    it('draws the sketch on an SVG overlay and clears it afterwards', () => {
+      const { map } = setup({ mode: CREATE, style: { sketch: { width: 5 } } });
       const container = map.getContainer();
       const points = circlePoints(400, 300, 100);
 
@@ -430,26 +679,28 @@ describe('DrawLayer', () => {
         }),
       );
       const path = container.querySelector(
-        'svg.leaflet-draw-shapes path.leaflet-line',
+        'svg.leaflet-draw-shapes path.leaflet-draw-shapes-sketch',
       );
       expect(path?.getAttribute('stroke-width')).toBe('5');
       expect(path?.getAttribute('d')).toMatch(/^M500 300L/);
 
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      expect(container.querySelector('path.leaflet-line')).toBeNull();
+      expect(
+        container.querySelector('path.leaflet-draw-shapes-sketch'),
+      ).toBeNull();
     });
 
     it('ignores strokes outside CREATE mode', () => {
       const { map, layer, events } = setup({ mode: EDIT });
       strokeWithMouse(map, circlePoints(400, 300, 100));
-      expect(layer.size()).toBe(0);
+      expect(layer.getLayers()).toHaveLength(0);
       expect(events).toHaveLength(0);
     });
 
     it('ignores clicks without movement', () => {
       const { map, layer, events } = setup({ mode: CREATE });
       strokeWithMouse(map, [new Point(400, 300)]);
-      expect(layer.size()).toBe(0);
+      expect(layer.getLayers()).toHaveLength(0);
       expect(events).toHaveLength(0);
     });
 
@@ -467,7 +718,7 @@ describe('DrawLayer', () => {
         }),
       );
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      expect(layer.size()).toBe(0);
+      expect(layer.getLayers()).toHaveLength(0);
     });
 
     it('cancel() abandons the stroke in progress', () => {
@@ -491,11 +742,13 @@ describe('DrawLayer', () => {
           }),
         ),
       );
-      layer.cancel();
+      expect(layer.cancel()).toBe(layer);
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 
-      expect(layer.size()).toBe(0);
-      expect(container.querySelector('path.leaflet-line')).toBeNull();
+      expect(layer.getLayers()).toHaveLength(0);
+      expect(
+        container.querySelector('path.leaflet-draw-shapes-sketch'),
+      ).toBeNull();
     });
 
     it('leaves CREATE mode after a stroke when leaveModeAfterCreate is set', () => {
@@ -504,7 +757,7 @@ describe('DrawLayer', () => {
         leaveModeAfterCreate: true,
       });
       strokeWithMouse(map, circlePoints(400, 300, 100));
-      expect(layer.mode()).toBe(DELETE);
+      expect(layer.getMode()).toBe(DELETE);
     });
   });
 
@@ -522,42 +775,50 @@ describe('DrawLayer', () => {
 
     it('deletes in DELETE mode', () => {
       const { map, layer, events } = setup({ mode: DELETE });
-      const [polygon] = layer.create(square(map, 400, 300));
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
       clickAt(polygon!, map, new Point(400, 300));
 
-      expect(layer.size()).toBe(0);
-      expect(events.at(-1)?.eventType).toBe('remove');
+      expect(layer.getLayers()).toHaveLength(0);
+      expect(events).toMatchObject([
+        { type: 'shapes:remove', layers: [polygon] },
+        { type: 'shapes:change', layers: [] },
+      ]);
     });
 
     it('appends a vertex on the nearest edge in APPEND mode', () => {
       const { map, layer, events } = setup({ mode: EDIT | APPEND });
-      const [polygon] = layer.create(square(map, 400, 300));
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
       clickAt(polygon!, map, new Point(400, 252));
 
       const ring = polygon!.getLatLngs()[0] as LatLng[];
       expect(ring).toHaveLength(5);
       expect(vertexMarkers(layer)).toHaveLength(5);
-      expect(events.at(-1)?.eventType).toBe('append');
+      expect(events).toMatchObject([
+        { type: 'shapes:edit', layers: [polygon] },
+        { type: 'shapes:change' },
+      ]);
     });
 
     it('with DELETE and APPEND, appends near an edge and deletes elsewhere', () => {
       const { map, layer, events } = setup({ mode: DELETE | APPEND });
-      const [polygon] = layer.create(square(map, 400, 300));
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
 
       clickAt(polygon!, map, new Point(400, 255));
-      expect(layer.size()).toBe(1);
-      expect(events.at(-1)?.eventType).toBe('append');
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(events.at(-2)?.type).toBe('shapes:edit');
 
       clickAt(polygon!, map, new Point(400, 300));
-      expect(layer.size()).toBe(0);
-      expect(events.at(-1)?.eventType).toBe('remove');
+      expect(layer.getLayers()).toHaveLength(0);
+      expect(events.at(-2)?.type).toBe('shapes:remove');
     });
 
     it('does nothing without DELETE or APPEND', () => {
       const { map, layer } = setup({ mode: EDIT });
-      const [polygon] = layer.create(square(map, 400, 300));
+      const [polygon] = layer.addPolygon(square(map, 400, 300));
       clickAt(polygon!, map, new Point(400, 300));
-      expect(layer.size()).toBe(1);
+      expect(layer.getLayers()).toHaveLength(1);
     });
   });
 
@@ -569,60 +830,82 @@ describe('DrawLayer', () => {
       map.fire('mouseup');
     };
 
-    it('moves a vertex and fires an edit event', () => {
+    it('moves a vertex and fires shapes:edit', () => {
       const { map, layer, events } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
       drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
 
-      expect(layer.size()).toBe(1);
-      const ring = (layer.all()[0]!.getLatLngs()[0] as LatLng[]).map((latLng) =>
-        map.latLngToContainerPoint(latLng).round(),
+      expect(layer.getLayers()).toHaveLength(1);
+      const ring = (polygons(layer)[0]!.getLatLngs()[0] as LatLng[]).map(
+        (latLng) => map.latLngToContainerPoint(latLng).round(),
       );
       expect(ring).toContainEqual(new Point(300, 200));
-      expect(events.at(-1)?.eventType).toBe('edit');
+      expect(events).toMatchObject([
+        { type: 'shapes:edit', layers: layer.getLayers() },
+        { type: 'shapes:change' },
+      ]);
     });
 
     it('stops tracking the mouse after the drag ends', () => {
       const { map, layer } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       const marker = vertexMarkers(layer)[0]!;
       drag(layer, marker, new Point(300, 200));
 
-      const before = layer.all()[0]!.getLatLngs();
+      const before = polygons(layer)[0]!.getLatLngs();
       map.fire('mousemove', {
         latlng: map.containerPointToLatLng(new Point(10, 10)),
       });
-      expect(layer.all()[0]!.getLatLngs()).toEqual(before);
+      expect(polygons(layer)[0]!.getLatLngs()).toEqual(before);
     });
 
     it('is ignored outside EDIT mode', () => {
       const { map, layer, events } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       const marker = vertexMarkers(layer)[0]!;
-      layer.mode(DELETE);
-      const before = layer.all()[0]!.getLatLngs();
+      layer.setMode(DELETE);
+      const before = polygons(layer)[0]!.getLatLngs();
+      events.length = 0;
       drag(layer, marker, new Point(300, 200));
 
-      expect(layer.all()[0]!.getLatLngs()).toEqual(before);
-      expect(events.at(-1)?.eventType).toBe('create');
+      expect(polygons(layer)[0]!.getLatLngs()).toEqual(before);
+      expect(events).toHaveLength(0);
     });
 
-    it('defers the edit event until the mode changes with notifyAfterEditExit', () => {
+    it('defers the edit events until the mode changes with notifyAfterEditExit', () => {
       const { map, layer, events } = setup({
         mode: EDIT,
         notifyAfterEditExit: true,
       });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
       drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
-      expect(events.at(-1)?.eventType).toBe('create');
+      drag(layer, vertexMarkers(layer)[1]!, new Point(500, 200));
+      expect(events).toHaveLength(0);
 
-      layer.mode(NONE);
-      expect(events.at(-1)?.eventType).toBe('edit');
+      layer.setMode(NONE);
+      expect(events).toMatchObject([
+        { type: 'shapes:edit', layers: layer.getLayers() },
+        { type: 'shapes:change' },
+      ]);
+    });
+
+    it('fires deferred edit events when the layer is removed', () => {
+      const { map, layer, events } = setup({
+        mode: EDIT,
+        notifyAfterEditExit: true,
+      });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+      drag(layer, vertexMarkers(layer)[0]!, new Point(300, 200));
+      layer.remove();
+      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
     });
 
     it('re-enables map dragging after the drag unless in CREATE mode', () => {
       const { map, layer } = setup({ mode: EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       const marker = vertexMarkers(layer)[0]!;
       marker.fire('mousedown');
       expect(map.dragging.enabled()).toBe(false);
@@ -632,7 +915,8 @@ describe('DrawLayer', () => {
 
     it('does not start a freehand stroke when grabbing a vertex in CREATE | EDIT mode', () => {
       const { map, layer, events } = setup({ mode: CREATE | EDIT });
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
       const icon = vertexMarkers(layer)[0]!.getElement()!;
 
       const container = map.getContainer();
@@ -651,27 +935,52 @@ describe('DrawLayer', () => {
         }),
       );
 
-      expect(container.querySelector('path.leaflet-line')).toBeNull();
+      expect(
+        container.querySelector('path.leaflet-draw-shapes-sketch'),
+      ).toBeNull();
       container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      expect(events.map((event) => event.eventType)).toEqual([
-        'create',
-        'edit',
-      ]);
+      expect(types(events)).toEqual(['shapes:edit', 'shapes:change']);
     });
   });
 
   describe('removal from the map', () => {
-    it('removes polygons, vertices, overlay and mode classes', () => {
+    it('takes polygons, vertices, overlay and mode classes off the map', () => {
       const { map, layer } = setup();
-      layer.create(square(map, 400, 300));
+      layer.addPolygon(square(map, 400, 300));
       layer.remove();
 
       const container = map.getContainer();
       expect(container.querySelector('svg.leaflet-draw-shapes')).toBeNull();
-      expect(container.querySelector('.leaflet-polygon')).toBeNull();
-      expect(container.querySelector('.leaflet-edge')).toBeNull();
-      expect(container.className).not.toMatch(/mode-/);
-      expect(layer.size()).toBe(0);
+      expect(
+        container.querySelector('.leaflet-draw-shapes-polygon'),
+      ).toBeNull();
+      expect(container.querySelector('.leaflet-draw-shapes-vertex')).toBeNull();
+      expect(container.className).not.toMatch(/leaflet-draw-shapes-mode/);
+    });
+
+    it('keeps its polygons, like any FeatureGroup', () => {
+      const { map, layer, events } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      events.length = 0;
+      layer.remove();
+      expect(layer.getLayers()).toHaveLength(1);
+      expect(events).toHaveLength(0);
+
+      layer.addTo(map);
+      expect(
+        map.getContainer().querySelectorAll('.leaflet-draw-shapes-polygon'),
+      ).toHaveLength(1);
+      expect(vertexMarkers(layer)).toHaveLength(4);
+    });
+
+    it('survives being toggled from a layers control', () => {
+      const { map, layer } = setup();
+      layer.addPolygon(square(map, 400, 300));
+      new Control.Layers({}, { Shapes: layer }).addTo(map);
+
+      map.removeLayer(layer);
+      map.addLayer(layer);
+      expect(layer.getLayers()).toHaveLength(1);
     });
 
     it('restores map dragging', () => {
@@ -694,7 +1003,7 @@ describe('DrawLayer', () => {
       layer.remove();
       layer.addTo(map);
       strokeWithMouse(map, circlePoints(400, 300, 100));
-      expect(layer.size()).toBe(1);
+      expect(layer.getLayers()).toHaveLength(1);
     });
   });
 
@@ -703,7 +1012,7 @@ describe('DrawLayer', () => {
     const other = new DrawLayer({ mode: NONE }).addTo(map);
     strokeWithMouse(map, circlePoints(400, 300, 100));
 
-    expect(layer.size()).toBe(1);
-    expect(other.size()).toBe(0);
+    expect(layer.getLayers()).toHaveLength(1);
+    expect(other.getLayers()).toHaveLength(0);
   });
 });

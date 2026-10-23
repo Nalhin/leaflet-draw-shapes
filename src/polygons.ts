@@ -4,10 +4,10 @@ import {
   type LatLng,
   type LatLngLiteral,
   type LeafletMouseEvent,
-  type Point,
+  type Map,
 } from 'leaflet';
+import { classNames, withClass } from './class-names';
 import {
-  notify,
   outerRing,
   polygonsOf,
   propagationEvents,
@@ -22,9 +22,47 @@ import {
   union,
 } from './geometry/clip';
 import { concaveHull } from './geometry/concave-hull';
-import { APPEND, DELETE, hasMode } from './modes';
-import type { DrawLayerOptions } from './options';
+import { hasMode, Mode } from './modes';
+import type { ResolvedOptions } from './options';
 import { createVertices, removeVertices } from './vertices';
+
+/** A polygon styled like the layer's own, ready to be added to it. */
+export function newPolygon(
+  context: DrawContext,
+  latLngs: readonly LatLngLiteral[],
+): Polygon {
+  return new Polygon([...latLngs], context.style.polygon);
+}
+
+/**
+ * Makes a polygon that was added to the layer editable: gives it the polygon
+ * class, vertex handles and click handling. Runs for every polygon, however it
+ * was added.
+ */
+export function attachPolygon(context: DrawContext, polygon: Polygon): void {
+  const element = polygon.getElement();
+  if (element) {
+    element.classList.add(classNames.polygon);
+  } else if (
+    !polygon.options.className?.split(' ').includes(classNames.polygon)
+  ) {
+    polygon.options.className = withClass(
+      classNames.polygon,
+      polygon.options.className,
+    );
+  }
+
+  polygon.on(propagationEvents, stopMapPropagation);
+  polygon.on('click', onPolygonClick, context);
+  context.vertices.set(polygon, createVertices(context, polygon));
+}
+
+/** Undoes {@link attachPolygon} for a polygon leaving the layer. */
+export function detachPolygon(context: DrawContext, polygon: Polygon): void {
+  polygon.off(propagationEvents, stopMapPropagation);
+  polygon.off('click', onPolygonClick, context);
+  removeVertices(context, polygon);
+}
 
 /**
  * Adds polygons built from `latLngs` to the layer. Self-intersecting shapes are
@@ -35,51 +73,30 @@ import { createVertices, removeVertices } from './vertices';
  */
 export function createPolygons(
   context: DrawContext,
+  map: Map,
   latLngs: readonly LatLngLiteral[],
-  options: DrawLayerOptions,
+  options: ResolvedOptions,
   preventMutations = false,
 ): Polygon[] {
-  const { map, layer } = context;
+  const { layer } = context;
   const shape =
-    !preventMutations && options.concavePolygon
-      ? concaveHull(latLngs)
-      : latLngs;
+    !preventMutations && options.concaveHull ? concaveHull(latLngs) : latLngs;
 
   const added: Polygon[] = [];
   for (const path of simplify(toPath(map, shape), options.simplifyFactor)) {
-    if (polygonsOf(context).length >= options.maximumPolygons) break;
+    if (polygonsOf(layer).length >= options.maxPolygons) break;
 
-    const style = layer.resolvedStyle().polygon;
-    const polygon = new Polygon(toLatLngs(map, path), {
-      ...style,
-      className: ['leaflet-polygon', style.className].filter(Boolean).join(' '),
-    });
+    const polygon = newPolygon(context, toLatLngs(map, path));
     layer.addLayer(polygon);
-    context.vertices.set(polygon, createVertices(context, polygon, options));
-
-    polygon.on(propagationEvents, stopMapPropagation);
-    polygon.on('click', (event: LeafletMouseEvent) => {
-      handlePolygonClick(context, polygon, options, event.containerPoint);
-    });
-
     added.push(polygon);
   }
 
   if (!preventMutations && options.mergePolygons && added.length) {
-    const merged = mergePolygons(context, options);
+    const merged = mergePolygons(context, map, options);
     return [...added.filter((polygon) => layer.hasLayer(polygon)), ...merged];
   }
 
   return added;
-}
-
-export function removePolygon(context: DrawContext, polygon: Polygon): void {
-  context.layer.removeLayer(polygon);
-  removeVertices(context, polygon);
-}
-
-export function clearPolygons(context: DrawContext): void {
-  polygonsOf(context).forEach((polygon) => removePolygon(context, polygon));
 }
 
 /**
@@ -89,10 +106,11 @@ export function clearPolygons(context: DrawContext): void {
  */
 export function mergePolygons(
   context: DrawContext,
-  options: DrawLayerOptions,
+  map: Map,
+  options: ResolvedOptions,
 ): Polygon[] {
-  const { map } = context;
-  const polygons = polygonsOf(context);
+  const { layer } = context;
+  const polygons = polygonsOf(layer);
   const paths = polygons.map((polygon) => toPath(map, outerRing(polygon)));
 
   const overlapping = paths.flatMap((path, index) =>
@@ -103,31 +121,30 @@ export function mergePolygons(
   if (!overlapping.length) return [];
 
   const merged = union(overlapping.map((index) => paths[index]!));
-  overlapping.forEach((index) => removePolygon(context, polygons[index]!));
+  overlapping.forEach((index) => layer.removeLayer(polygons[index]!));
 
   return merged.flatMap((path) =>
     // Prevent mutations, otherwise creating would trigger another merge.
-    createPolygons(context, toLatLngs(map, path), options, true),
+    createPolygons(context, map, toLatLngs(map, path), options, true),
   );
 }
 
 /**
  * In `DELETE` mode a click removes the polygon; in `APPEND` mode it inserts a
- * vertex on the nearest edge. With both, clicks within `elbowDistance` pixels
- * of an edge append and clicks further inside delete.
+ * vertex on the nearest edge. With both, clicks within `appendTolerance`
+ * pixels of an edge append and clicks further inside delete.
  */
-function handlePolygonClick(
-  context: DrawContext,
-  polygon: Polygon,
-  options: DrawLayerOptions,
-  clickPoint: Point,
-): void {
-  const { map, layer } = context;
-  const mode = layer.mode();
-  const canDelete = hasMode(mode, DELETE);
-  const canAppend = hasMode(mode, APPEND);
+function onPolygonClick(this: DrawContext, event: LeafletMouseEvent): void {
+  const { map, layer } = this;
+  if (!map) return;
+
+  const polygon = event.target as Polygon;
+  const mode = layer.getMode();
+  const canDelete = hasMode(mode, Mode.DELETE);
+  const canAppend = hasMode(mode, Mode.APPEND);
   if (!canDelete && !canAppend) return;
 
+  const clickPoint = event.containerPoint;
   const ring = outerRing(polygon);
   const points = ring.map((latLng) => map.latLngToContainerPoint(latLng));
   const nearest = points.reduce(
@@ -140,28 +157,31 @@ function handlePolygonClick(
   );
 
   const shouldAppend =
-    canAppend && (!canDelete || nearest.distance <= options.elbowDistance);
+    canAppend &&
+    (!canDelete || nearest.distance <= layer.options.appendTolerance);
 
   if (shouldAppend && nearest.index >= 0) {
-    appendVertex(context, polygon, options, nearest.index, {
-      latLng: map.containerPointToLatLng(clickPoint),
-      ring,
+    const latLng = map.containerPointToLatLng(clickPoint);
+    this.commit('shapes:edit', () => {
+      appendVertex(this, polygon, nearest.index, latLng, ring);
+      return [polygon];
     });
-    notify(context, 'append');
   } else if (canDelete) {
-    removePolygon(context, polygon);
-    notify(context, 'remove');
+    this.commit('shapes:remove', () => {
+      layer.removeLayer(polygon);
+      return [polygon];
+    });
   }
 }
 
 function appendVertex(
   context: DrawContext,
   polygon: Polygon,
-  options: DrawLayerOptions,
   afterIndex: number,
-  { latLng, ring }: { latLng: LatLng; ring: LatLng[] },
+  latLng: LatLng,
+  ring: LatLng[],
 ): void {
   polygon.setLatLngs(ring.toSpliced(afterIndex + 1, 0, latLng));
   removeVertices(context, polygon);
-  context.vertices.set(polygon, createVertices(context, polygon, options));
+  context.vertices.set(polygon, createVertices(context, polygon));
 }

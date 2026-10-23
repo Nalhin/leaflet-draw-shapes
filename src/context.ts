@@ -8,41 +8,43 @@ import {
   type Map,
 } from 'leaflet';
 import type { DrawLayer } from './draw-layer';
-import type { MarkersEventType } from './events';
+import type { DrawLayerEventMap } from './events';
+import type { ResolvedStyle } from './style';
 
-/** Per-map state shared by the drawing, editing and merging helpers. */
+/** Events fired for user interactions, each followed by `shapes:change`. */
+export type ActionEventType = keyof Pick<
+  DrawLayerEventMap,
+  'shapes:create' | 'shapes:edit' | 'shapes:remove'
+>;
+
+/** Per-layer state shared by the drawing, editing and merging helpers. */
 export interface DrawContext {
-  readonly map: Map;
   readonly layer: DrawLayer;
+  /** The map the layer is on, or `null` while it isn't on one. */
+  map: Map | null;
   /** Vertex markers live here so they never leak into `layer.toGeoJSON()`. */
   readonly vertexLayer: LayerGroup;
   readonly vertices: WeakMap<Polygon, CircleMarker[]>;
+  style: ResolvedStyle;
   /** Set while a vertex is being dragged, so no freehand stroke starts. */
   draggingVertex: boolean;
-  /** Pending `markers` event while `notifyAfterEditExit` is enabled. */
-  deferredNotify: (() => void) | null;
+  /**
+   * Runs `change` as one batch. If it changed anything, fires `type` with the
+   * polygons it returns, then `shapes:change`. With `defer`, holds the events
+   * back until the mode changes.
+   */
+  commit(type: ActionEventType, change: () => Polygon[], defer?: boolean): void;
 }
 
-export function polygonsOf(context: DrawContext): Polygon[] {
-  return context.layer
+/** The polygons on the layer, in the order they were added. */
+export function polygonsOf(layer: DrawLayer): Polygon[] {
+  return layer
     .getLayers()
-    .filter((layer): layer is Polygon => layer instanceof Polygon);
+    .filter((child): child is Polygon => child instanceof Polygon);
 }
 
 export function outerRing(polygon: Polygon): LatLng[] {
   return (polygon.getLatLngs()[0] ?? []) as LatLng[];
-}
-
-/** Fires `markers` with every polygon as a closed ring. */
-export function notify(
-  context: DrawContext,
-  eventType: MarkersEventType,
-): void {
-  const latLngs = polygonsOf(context).map((polygon) => {
-    const ring = outerRing(polygon);
-    return ring.length ? [...ring, ring[0]!] : ring;
-  });
-  context.layer.fire('markers', { latLngs, eventType });
 }
 
 /**

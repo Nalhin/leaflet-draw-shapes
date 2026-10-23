@@ -1,5 +1,5 @@
 import { Map, Point, type LatLngLiteral } from 'leaflet';
-import { DrawLayer, type DrawLayerOptions, type MarkersEvent } from '../src';
+import { DrawLayer, type DrawLayerOptions, type ShapesEvent } from '../src';
 
 export function createMap(options: { dragging?: boolean } = {}): Map {
   const container = document.createElement('div');
@@ -8,13 +8,17 @@ export function createMap(options: { dragging?: boolean } = {}): Map {
 }
 
 export function setup(
-  options: Partial<DrawLayerOptions> = {},
+  options: DrawLayerOptions = {},
   mapOptions: { dragging?: boolean } = {},
-): { map: Map; layer: DrawLayer; events: MarkersEvent[] } {
+): { map: Map; layer: DrawLayer; events: ShapesEvent[] } {
   const map = createMap(mapOptions);
   const layer = new DrawLayer(options).addTo(map);
-  const events: MarkersEvent[] = [];
-  layer.on('markers', (event) => events.push(event));
+  const events: ShapesEvent[] = [];
+  const record = (event: ShapesEvent) => events.push(event);
+  layer.on('shapes:create', record);
+  layer.on('shapes:edit', record);
+  layer.on('shapes:remove', record);
+  layer.on('shapes:change', record);
   return { map, layer, events };
 }
 
@@ -84,4 +88,9 @@ export function strokeWithTouch(map: Map, points: Point[]): void {
   touch('touchstart', first);
   rest.forEach((point) => touch('touchmove', point));
   touch('touchend');
+}
+
+/** The `type` of each recorded event, e.g. `['shapes:create', 'shapes:change']`. */
+export function types(events: ShapesEvent[]): string[] {
+  return events.map((event) => event.type);
 }

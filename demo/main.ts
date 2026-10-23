@@ -1,16 +1,7 @@
 import 'leaflet/dist/leaflet.css';
 import './style.css';
 import { map as createMap, tileLayer } from 'leaflet';
-import {
-  ALL,
-  APPEND,
-  CREATE,
-  DELETE,
-  EDIT,
-  drawLayer,
-  type DrawLayerOptions,
-  type MarkersEventType,
-} from 'leaflet-draw-shapes';
+import { Mode, drawLayer, type DrawLayerOptions } from 'leaflet-draw-shapes';
 
 const map = createMap('map', { zoomControl: false }).setView(
   [52.2297, 21.0122],
@@ -24,11 +15,8 @@ tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 const layer = drawLayer({
-  mode: ALL,
-  style: {
-    color: '#6d5efc',
-    polygon: { weight: 2, fillOpacity: 0.25 },
-  },
+  mode: Mode.ALL,
+  style: { color: '#6d5efc', weight: 2, fillOpacity: 0.25 },
 }).addTo(map);
 
 const $ = (selector: string): Element => document.querySelector(selector)!;
@@ -44,30 +32,32 @@ function renderMode(mode: number): void {
 }
 
 function toggleMode(flag: number): void {
-  layer.mode(layer.mode() ^ flag);
+  layer.setMode(layer.getMode() ^ flag);
 }
 
-const icons: Record<MarkersEventType, string> = {
+const icons = {
   create: '✏️',
   edit: '↔️',
-  append: '➕',
   remove: '🗑️',
   clear: '🧹',
 };
 
-function log(eventType: MarkersEventType, count: number): void {
+function log(action: keyof typeof icons): void {
+  const count = layer.getLayers().length;
   const item = document.createElement('li');
-  item.textContent = `${icons[eventType]} ${eventType} → ${count} shape${count === 1 ? '' : 's'}`;
+  item.textContent = `${icons[action]} ${action} → ${count} shape${count === 1 ? '' : 's'}`;
   const list = $('#log');
   list.prepend(item);
   while (list.children.length > 6) list.lastElementChild?.remove();
 }
 
-layer.on('mode', ({ mode }) => renderMode(mode));
-layer.on('markers', ({ latLngs, eventType }) => {
-  $('#count').textContent = String(latLngs.length);
-  log(eventType, latLngs.length);
+layer.on('shapes:modechange', ({ mode }) => renderMode(mode));
+layer.on('shapes:change', ({ layers }) => {
+  $('#count').textContent = String(layers.length);
 });
+for (const action of ['create', 'edit', 'remove'] as const) {
+  layer.on(`shapes:${action}`, () => log(action));
+}
 
 modeButtons.forEach((button) =>
   button.addEventListener('click', () =>
@@ -82,7 +72,10 @@ document.querySelectorAll<HTMLInputElement>('[data-option]').forEach((input) =>
   }),
 );
 
-$('#clear').addEventListener('click', () => layer.clear());
+$('#clear').addEventListener('click', () => {
+  layer.clearLayers();
+  log('clear');
+});
 
 $('#export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(layer.toGeoJSON(), null, 2)], {
@@ -97,10 +90,10 @@ $('#export').addEventListener('click', () => {
 });
 
 const shortcuts = new Map([
-  ['1', CREATE],
-  ['2', EDIT],
-  ['3', DELETE],
-  ['4', APPEND],
+  ['1', Mode.CREATE],
+  ['2', Mode.EDIT],
+  ['3', Mode.DELETE],
+  ['4', Mode.APPEND],
 ]);
 
 document.addEventListener('keydown', (event) => {
@@ -110,4 +103,4 @@ document.addEventListener('keydown', (event) => {
   if (flag) toggleMode(flag);
 });
 
-renderMode(layer.mode());
+renderMode(layer.getMode());

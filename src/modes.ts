@@ -1,27 +1,18 @@
 /**
- * Interaction modes are bit flags, so they can be combined with `|`
- * (e.g. `CREATE | DELETE`) and toggled with `^`.
+ * Interaction modes. They are bit flags, so they can be combined with `|`
+ * (e.g. `Mode.CREATE | Mode.DELETE`) and toggled with `^`.
  */
-export const NONE = 0;
-export const CREATE = 1;
-export const EDIT = 2;
-export const DELETE = 4;
-export const APPEND = 8;
-export const EDIT_APPEND: number = EDIT | APPEND;
-export const ALL: number = CREATE | EDIT | DELETE | APPEND;
+export const Mode = {
+  NONE: 0,
+  CREATE: 1,
+  EDIT: 2,
+  DELETE: 4,
+  APPEND: 8,
+  ALL: 15,
+} as const;
 
-/** A bitmask made of {@link CREATE}, {@link EDIT}, {@link DELETE} and {@link APPEND}. */
+/** A bitmask made of {@link Mode} flags. */
 export type Mode = number;
-
-/** CSS class applied to the map container for each active mode. */
-export const modeClassNames: readonly (readonly [Mode, string])[] = [
-  [CREATE, 'mode-create'],
-  [EDIT, 'mode-edit'],
-  [DELETE, 'mode-delete'],
-  [APPEND, 'mode-append'],
-];
-
-export const noModeClassName = 'mode-none';
 
 export function hasMode(mode: Mode, flag: Mode): boolean {
   return (mode & flag) === flag;

@@ -1,6 +1,7 @@
-import { DomEvent, type LatLng } from 'leaflet';
+import { DomEvent, type LatLng, type Map } from 'leaflet';
+import { classNames } from './class-names';
 import type { DrawContext } from './context';
-import { CREATE, hasMode } from './modes';
+import { hasMode, Mode } from './modes';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -28,15 +29,16 @@ function positionOf(event: Event): ClientPosition | undefined {
  */
 export function enableFreehand(
   context: DrawContext,
+  map: Map,
   onStroke: (latLngs: LatLng[]) => void,
 ): FreehandHandle {
-  const { map, layer } = context;
+  const { layer } = context;
   const container = map.getContainer();
   const toContainerPoint = (position: ClientPosition) =>
     map.mouseEventToContainerPoint(position as MouseEvent);
 
   const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.classList.add('leaflet-draw-shapes');
+  svg.classList.add(classNames.overlay);
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
   Object.assign(svg.style, {
@@ -51,7 +53,7 @@ export function enableFreehand(
   let cancelStroke: (() => void) | null = null;
 
   const start = (event: Event): void => {
-    if (!hasMode(layer.mode(), CREATE) || cancelStroke) return;
+    if (!hasMode(layer.getMode(), Mode.CREATE) || cancelStroke) return;
     if (event instanceof MouseEvent && event.button !== 0) return;
     // Dragging a vertex in `CREATE | EDIT` mode should not start a stroke.
     if (context.draggingVertex) return;
@@ -61,16 +63,16 @@ export function enableFreehand(
 
     const { x, y } = toContainerPoint(origin);
     const path = document.createElementNS(SVG_NS, 'path');
-    path.classList.add('leaflet-line');
-    const { stroke } = layer.resolvedStyle();
+    path.classList.add(classNames.sketch);
+    const { sketch } = context.style;
     const attributes = {
       fill: 'none',
-      stroke: stroke.color,
-      'stroke-width': String(stroke.width),
-      'stroke-opacity': String(stroke.opacity),
+      stroke: sketch.color,
+      'stroke-width': String(sketch.width),
+      'stroke-opacity': String(sketch.opacity),
       'stroke-linecap': 'round',
       'stroke-linejoin': 'round',
-      ...(stroke.dashArray && { 'stroke-dasharray': stroke.dashArray }),
+      ...(sketch.dashArray && { 'stroke-dasharray': sketch.dashArray }),
     };
     for (const [name, value] of Object.entries(attributes)) {
       path.setAttribute(name, value);

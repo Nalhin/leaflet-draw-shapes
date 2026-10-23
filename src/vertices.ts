@@ -2,27 +2,28 @@ import {
   CircleMarker,
   type CircleMarkerOptions,
   type LeafletMouseEvent,
+  type Map,
   type Polygon,
 } from 'leaflet';
+import { classNames, withClass } from './class-names';
 import {
-  notify,
   outerRing,
   propagationEvents,
   stopMapPropagation,
   type DrawContext,
 } from './context';
-import { CREATE, EDIT, hasMode, type Mode } from './modes';
-import type { DrawLayerOptions } from './options';
-import { createPolygons, mergePolygons, removePolygon } from './polygons';
+import { hasMode, Mode } from './modes';
+import { createPolygons, mergePolygons } from './polygons';
 import type { ResolvedStyle } from './style';
 
-export const vertexClassName = 'leaflet-edge';
-
 /** Vertices are only on the map, and so only interactive, in `EDIT` mode. */
-export function syncVertexVisibility(context: DrawContext, mode: Mode): void {
-  const { map, vertexLayer } = context;
-  if (hasMode(mode, EDIT)) vertexLayer.addTo(map);
-  else vertexLayer.remove();
+export function syncVertexVisibility(
+  context: DrawContext,
+  map: Map,
+  mode: Mode,
+): void {
+  if (hasMode(mode, Mode.EDIT)) context.vertexLayer.addTo(map);
+  else context.vertexLayer.remove();
 }
 
 /**
@@ -49,20 +50,16 @@ export function removeVertices(context: DrawContext, polygon: Polygon): void {
 export function createVertices(
   context: DrawContext,
   polygon: Polygon,
-  options: DrawLayerOptions,
 ): CircleMarker[] {
-  const { map, layer } = context;
-  const style = layer.resolvedStyle();
+  const { layer } = context;
   const reveal = (marker: CircleMarker, visible: boolean): void => {
-    marker.setStyle(vertexAppearance(layer.resolvedStyle(), visible));
+    marker.setStyle(vertexAppearance(context.style, visible));
   };
 
   const markers = outerRing(polygon).map((latLng) => {
     const marker = new CircleMarker(latLng, {
-      ...vertexAppearance(style, false),
-      className: [vertexClassName, style.vertex.className]
-        .filter(Boolean)
-        .join(' '),
+      ...vertexAppearance(context.style, false),
+      className: withClass(classNames.vertex, context.style.vertex.className),
       bubblingMouseEvents: false,
     });
     context.vertexLayer.addLayer(marker);
@@ -77,7 +74,8 @@ export function createVertices(
   });
 
   function startDrag(marker: CircleMarker): void {
-    if (!hasMode(layer.mode(), EDIT)) return;
+    const { map } = context;
+    if (!map || !hasMode(layer.getMode(), Mode.EDIT)) return;
 
     // Tell the freehand handler, which sees the same mousedown next, to ignore it.
     context.draggingVertex = true;
@@ -97,27 +95,32 @@ export function createVertices(
       marker.off('mouseup', onEnd);
       context.draggingVertex = false;
 
-      if (!hasMode(layer.mode(), CREATE) && map.options.dragging !== false) {
+      if (
+        !hasMode(layer.getMode(), Mode.CREATE) &&
+        map.options.dragging !== false
+      ) {
         map.dragging.enable();
       }
 
-      // Re-create the polygon so self-intersections introduced by the drag get
-      // split into simple polygons.
-      const latLngs = outerRing(polygon);
-      removePolygon(context, polygon);
-      createPolygons(context, latLngs, options, true);
+      const { options } = layer;
+      context.commit(
+        'shapes:edit',
+        () => {
+          // Re-create the polygon so self-intersections introduced by the drag
+          // get split into simple polygons.
+          const latLngs = outerRing(polygon);
+          layer.removeLayer(polygon);
+          const result = createPolygons(context, map, latLngs, options, true);
 
-      // Two passes give better results when one merge creates a new overlap.
-      if (options.mergePolygons) {
-        mergePolygons(context, options);
-        mergePolygons(context, options);
-      }
-
-      if (options.notifyAfterEditExit) {
-        context.deferredNotify = () => notify(context, 'edit');
-      } else {
-        notify(context, 'edit');
-      }
+          // Two passes give better results when one merge creates a new overlap.
+          if (options.mergePolygons) {
+            result.push(...mergePolygons(context, map, options));
+            result.push(...mergePolygons(context, map, options));
+          }
+          return result.filter((shape) => layer.hasLayer(shape));
+        },
+        options.notifyAfterEditExit,
+      );
     };
 
     map.on('mousemove', onMove);
