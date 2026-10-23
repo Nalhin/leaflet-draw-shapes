@@ -20,7 +20,11 @@ A full TypeScript rewrite with a modern toolchain, tests and a live demo.
 - `create()` returns `[]` instead of `undefined` when the layer isn't on a map.
 - Vertex handles are SVG circle markers instead of `DivIcon` markers, and are
   only on the map in `EDIT` mode. The `.leaflet-edge.disabled` class is gone.
-- `strokeWidth` is deprecated in favour of `style.stroke.width`.
+- The default export is gone; use the named export
+  (`import { DrawLayer } from 'leaflet-draw-shapes'`) or `drawLayer()`.
+- Removed the `strokeWidth` option; use `style.stroke.width`.
+- Moved `smoothFactor` from the top-level options to `style.polygon.smoothFactor`
+  (still `0.3` by default).
 - `markers` is no longer fired after a click that didn't draw anything.
 
 ### Added

@@ -96,7 +96,6 @@ The active modes are also added to the map container as classes (`mode-create`, 
 | `notifyAfterEditExit`  | `false`    | Hold back the `markers` event for vertex edits until the mode changes. |
 | `elbowDistance`        | `10`       | Pixel distance from an edge that counts as an append click.            |
 | `simplifyFactor`       | `1.1`      | Pixel distance under which near-duplicate vertices are dropped.        |
-| `smoothFactor`         | `0.3`      | Leaflet's polyline smoothing for the rendered outline.                 |
 
 ## API
 
@@ -142,7 +141,7 @@ drawLayer({ style: { color: 'tomato' } });
 
 Vertex handles stay invisible so shapes look clean, but they can still be grabbed. A handle appears when the pointer is on it or while it's being dragged. Set `showVertices: 'always'` to keep them visible.
 
-Then fine-tune any part. `polygon` takes Leaflet [path options](https://leafletjs.com/reference.html#path-option), and `vertex` takes [circle marker options](https://leafletjs.com/reference.html#circlemarker-option):
+Then fine-tune any part. `polygon` takes Leaflet [polyline options](https://leafletjs.com/reference.html#polyline-option), and `vertex` takes [circle marker options](https://leafletjs.com/reference.html#circlemarker-option):
 
 ```ts
 drawLayer({
@@ -159,7 +158,7 @@ drawLayer({
 | -------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `color`        | `string`                                                                   | `'#3388ff'`, Leaflet's blue                                  |
 | `showVertices` | `'hover' \| 'always'`                                                      | `'hover'`: handles are invisible until the pointer is on one |
-| `polygon`      | [`PathOptions`](https://leafletjs.com/reference.html#path-option)          | Leaflet's defaults                                           |
+| `polygon`      | [`PolylineOptions`](https://leafletjs.com/reference.html#polyline-option)  | Leaflet's defaults, `smoothFactor: 0.3`                      |
 | `vertex`       | [`CircleMarkerOptions`](https://leafletjs.com/reference.html#circlemarker) | `radius: 5`, `weight: 2`, white fill                         |
 | `stroke`       | `{ color, width, opacity, dashArray }`                                     | `width: 2`, `opacity: 1`                                     |
 
@@ -215,7 +214,8 @@ Version 2 is a TypeScript rewrite. Most code keeps working; the breaking changes
 - **Internal exports removed.** `polygons`, `instanceKey`, `modesKey`, `edgesKey`, `notifyDeferredKey` and the `map.simplifyPolygon` hook are gone. Use `all()`, `mode()` and the events instead.
 - **Removing the layer cleans up.** Shapes, vertex handles and DOM listeners are removed, and map dragging is restored.
 - **Shapes are children of the layer.** `getLayers()`, `toGeoJSON()` and `getBounds()` now return them.
-- **Styling moved to `style`.** Polygon path options such as `color` now go in `style.polygon`, or use `style.color` to theme everything. `strokeWidth` still works but is deprecated. Vertex handles are SVG circles now, so old `.leaflet-edge` CSS for `DivIcon`s needs updating.
+- **No default export.** Use `import { DrawLayer } from 'leaflet-draw-shapes'` or `drawLayer()`.
+- **Styling moved to `style`.** Polygon options such as `color` and `smoothFactor` now go in `style.polygon`, or use `style.color` to theme everything. `strokeWidth` is now `style.stroke.width`. Vertex handles are SVG circles now, so old `.leaflet-edge` CSS for `DivIcon`s needs updating.
 - **`create()`** always returns an array (`[]` when off-map), includes the new shape when nothing merged with it, and accepts `[lat, lng]` tuples.
 - **`markers` events** are no longer fired for clicks that didn't draw anything. Appending a vertex while both `DELETE` and `APPEND` are active now reports `'append'` instead of `'remove'`.
 
