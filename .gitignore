@@ -1,7 +1,6 @@
 node_modules
 .idea
+.DS_Store
 coverage
 dist
-lib
-build
-.parcel-cache
+*.tsbuildinfo

@@ -1,18 +1,56 @@
 # Contributing
 
-When contributing to this repository, please first discuss the change you wish to make via issue,
-email, or any other method with the owners of this repository before making a change.
+Thanks for helping out! For anything bigger than a small fix, please open an
+issue first so we can agree on the approach.
 
-Please note we have a code of conduct, please follow it in all your interactions with the project.
+Please note we have a [code of conduct](CODE_OF_CONDUCT.md); please follow it
+in all your interactions with the project.
 
-## Pull Request Process
+## Setup
 
-1. Ensure any install or build dependencies are removed before the end of the layer when doing a
-   build.
-2. Update the README.md with details of changes to the interface, this includes new environment
-   variables, exposed ports, useful file locations and container parameters.
-3. Increase the version numbers in any examples files and the README.md to the new version that this
-   Pull Request would represent. The versioning scheme we use is [SemVer](http://semver.org/).
-4. Follow [ConventionalCommits](https://www.conventionalcommits.org/en/v1.0.0/#summary) naming convention in your commit messages.
-5. You may merge the Pull Request in once you have the sign-off of one other developer, or if you
-   do not have permission to do that, you may request the second reviewer to merge it for you.
+You need Node.js 24+ and [pnpm](https://pnpm.io) (the version is pinned in
+`package.json`).
+
+```sh
+pnpm install
+pnpm dev     # interactive demo using the source directly
+pnpm test    # or `pnpm test:watch`
+pnpm check   # everything CI runs: lint, format, typecheck, test, build
+```
+
+## Pull requests
+
+1. Add or update tests in `test/` for any behaviour change.
+2. Update `README.md` for API changes, and add an entry under
+   `[Unreleased]` in `CHANGELOG.md`.
+3. Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+   for commit messages.
+4. Make sure `pnpm check` passes.
+
+## Releasing
+
+The version is taken from the Git tag, so `package.json` keeps the placeholder
+`0.0.0-development`. To release:
+
+1. Move the `[Unreleased]` changelog entries under the new version and merge to
+   `main`.
+2. Create a GitHub Release with a `vX.Y.Z` tag:
+
+   ```sh
+   gh release create v2.0.0 --generate-notes
+   ```
+
+   Mark it as a pre-release (or use a tag like `v2.1.0-beta.1` with
+   `--prerelease`) to publish under the `next` npm dist-tag.
+
+3. The [Release workflow](.github/workflows/release.yml) runs `pnpm check`,
+   stamps the version and publishes to npm with provenance.
+
+### One-time setup
+
+- **npm trusted publishing.** On npmjs.com, open the package's Settings, then
+  Trusted publishing, and add a GitHub Actions publisher with owner `Nalhin`,
+  repository `leaflet-draw-shapes`, workflow `release.yml` and environment
+  `npm`. No `NPM_TOKEN` secret is needed.
+- **GitHub Pages.** In the repo's Settings, open Pages and set Source to
+  "GitHub Actions" so the demo deploys from `main`.
