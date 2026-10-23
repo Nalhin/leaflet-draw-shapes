@@ -5,6 +5,7 @@ import {
   Polygon,
   LatLngLiteral,
   DomEvent,
+  LayerOptions,
 } from 'leaflet';
 import { select, Selection } from 'd3-selection';
 import { line, curveMonotoneX } from 'd3-shape';
@@ -27,7 +28,7 @@ export const polygons = new WeakMap();
 /**
  * Option object accepted by the Index constructor
  */
-export interface DrawLayerOptions {
+export interface DrawLayerOptions extends LayerOptions {
   /**
    * Modifies the default mode.
    * @default ALL
@@ -110,7 +111,7 @@ export const edgesKey = Symbol('draw-shapes/edges');
 const cancelKey = Symbol('draw-shapes/cancel');
 
 export default class DrawLayer extends FeatureGroup {
-  private readonly options: DrawLayerOptions;
+  readonly options: DrawLayerOptions;
   private map: Map | null = null;
   private svg: Selection<SVGSVGElement, unknown, null, undefined> | null = null;
 
