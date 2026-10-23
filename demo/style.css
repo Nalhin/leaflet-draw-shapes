@@ -1,12 +1,13 @@
 :root {
   color-scheme: light dark;
-  --bg: rgb(255 255 255 / 0.86);
-  --fg: #16181d;
-  --muted: #5b6170;
-  --border: rgb(15 23 42 / 0.1);
-  --accent: #6d5efc;
-  --accent-fg: #fff;
-  --danger: #e5484d;
+  --bg: #fff;
+  --fg: #1c1e21;
+  --muted: #65676b;
+  --border: #d4d6da;
+  --hover: #f2f3f5;
+  --accent: #1d6fd8;
+  --accent-bg: #e8f1fd;
+  --danger: #c9302c;
   font-family:
     ui-sans-serif,
     system-ui,
@@ -18,10 +19,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: rgb(17 19 24 / 0.86);
-    --fg: #eceef3;
-    --muted: #9aa1b2;
-    --border: rgb(255 255 255 / 0.1);
+    --bg: #1f2125;
+    --fg: #e4e6eb;
+    --muted: #a0a4ab;
+    --border: #3a3d42;
+    --hover: #2a2c31;
+    --accent: #6aa8f7;
+    --accent-bg: #1d2a3d;
+    --danger: #f2716d;
   }
 }
 
@@ -35,35 +40,31 @@ body,
 .panel {
   position: absolute;
   z-index: 1100;
-  top: 16px;
-  left: 16px;
-  width: min(300px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  top: 12px;
+  left: 12px;
+  width: min(288px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
   overflow: auto;
   box-sizing: border-box;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  padding: 14px;
+  border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.15);
-  backdrop-filter: blur(14px) saturate(1.4);
-  font-size: 14px;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.3);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 h1 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 h2 {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 11px;
+  margin: 0 0 6px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 header p {
@@ -72,79 +73,92 @@ header p {
 }
 
 section {
-  margin-top: 16px;
-}
-
-.modes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  margin-top: 14px;
 }
 
 button {
-  padding: 8px 10px;
+  padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
+  border-radius: 4px;
+  background: var(--bg);
   color: inherit;
   font: inherit;
+  white-space: nowrap;
   cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms,
-    border-color 120ms;
 }
 
 button:hover {
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
-button[aria-pressed='true'] {
+button:focus-visible {
+  position: relative;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.modes {
+  display: flex;
+}
+
+.modes button {
+  flex: 1;
+  padding-inline: 0;
+  border-radius: 0;
+}
+
+.modes button + button {
+  margin-left: -1px;
+}
+
+.modes button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.modes button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.modes button[aria-pressed='true'] {
+  position: relative;
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 500;
 }
 
 button.danger:hover {
-  border-color: var(--danger);
   color: var(--danger);
-}
-
-kbd {
-  padding: 0 5px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  opacity: 0.6;
-  font-size: 11px;
 }
 
 label {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 3px 0;
+  padding: 2px 0;
   cursor: pointer;
 }
 
 input[type='checkbox'] {
+  margin: 0;
   accent-color: var(--accent);
 }
 
 .stats {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+}
+
+.stats span {
+  margin-right: auto;
+  white-space: nowrap;
+  color: var(--muted);
 }
 
 .stats strong {
-  font-size: 22px;
+  color: var(--fg);
   font-variant-numeric: tabular-nums;
-}
-
-.actions {
-  display: flex;
-  gap: 6px;
 }
 
 #log {
@@ -156,10 +170,6 @@ input[type='checkbox'] {
   font-size: 12px;
 }
 
-#log li {
-  padding: 2px 0;
-}
-
 #log li:first-child {
   color: var(--fg);
 }
@@ -169,7 +179,9 @@ input[type='checkbox'] {
 }
 
 footer {
-  margin-top: 16px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
 }
@@ -181,7 +193,7 @@ footer a {
 @media (max-width: 600px) {
   .panel {
     top: auto;
-    bottom: 16px;
+    bottom: 12px;
     max-height: 45vh;
   }
 }

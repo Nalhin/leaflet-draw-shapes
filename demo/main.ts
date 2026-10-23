@@ -16,7 +16,7 @@ tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const layer = drawLayer({
   mode: Mode.ALL,
-  style: { color: '#6d5efc', weight: 2, fillOpacity: 0.25 },
+  style: { color: '#3388ff', weight: 2, fillOpacity: 0.2 },
 }).addTo(map);
 
 const $ = (selector: string): Element => document.querySelector(selector)!;
@@ -35,17 +35,10 @@ function toggleMode(flag: number): void {
   layer.setMode(layer.getMode() ^ flag);
 }
 
-const icons = {
-  create: '✏️',
-  edit: '↔️',
-  remove: '🗑️',
-  clear: '🧹',
-};
-
-function log(action: keyof typeof icons): void {
+function log(action: 'create' | 'edit' | 'remove' | 'clear'): void {
   const count = layer.getLayers().length;
   const item = document.createElement('li');
-  item.textContent = `${icons[action]} ${action} → ${count} shape${count === 1 ? '' : 's'}`;
+  item.textContent = `${action.padEnd(6)} → ${count} shape${count === 1 ? '' : 's'}`;
   const list = $('#log');
   list.prepend(item);
   while (list.children.length > 6) list.lastElementChild?.remove();
