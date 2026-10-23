@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Freehand polygon drawing for Leaflet maps — draw, merge, edit and delete shapes with mouse or touch."
+    />
+    <title>Leaflet Draw Shapes</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✏️</text></svg>"
+    />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <aside class="panel" aria-label="Controls">
+      <header>
+        <h1>Leaflet Draw Shapes</h1>
+        <p>Freehand polygons for Leaflet. Draw on the map to try it.</p>
+      </header>
+
+      <section>
+        <h2>Mode</h2>
+        <div class="modes" role="group" aria-label="Mode">
+          <button type="button" data-mode="1" title="Draw shapes (1)">
+            <kbd>1</kbd> Create
+          </button>
+          <button type="button" data-mode="2" title="Drag vertices (2)">
+            <kbd>2</kbd> Edit
+          </button>
+          <button
+            type="button"
+            data-mode="4"
+            title="Click a shape to delete it (3)"
+          >
+            <kbd>3</kbd> Delete
+          </button>
+          <button
+            type="button"
+            data-mode="8"
+            title="Click an edge to add a vertex (4)"
+          >
+            <kbd>4</kbd> Append
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Options</h2>
+        <label
+          ><input type="checkbox" data-option="mergePolygons" checked /> Merge
+          overlapping shapes</label
+        >
+        <label
+          ><input type="checkbox" data-option="concavePolygon" checked />
+          Concave hull</label
+        >
+        <label
+          ><input type="checkbox" data-option="leaveModeAfterCreate" /> Leave
+          create mode after drawing</label
+        >
+      </section>
+
+      <section class="stats">
+        <div><strong id="count">0</strong> shapes</div>
+        <div class="actions">
+          <button type="button" id="export">Export GeoJSON</button>
+          <button type="button" id="clear" class="danger">Clear</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Events</h2>
+        <ol id="log" aria-live="polite"></ol>
+      </section>
+
+      <footer>
+        <a href="https://github.com/Nalhin/leaflet-draw-shapes">GitHub</a> ·
+        <a href="https://www.npmjs.com/package/leaflet-draw-shapes">npm</a> ·
+        <kbd>Esc</kbd> cancels a stroke
+      </footer>
+    </aside>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,26 +1,24 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
-    "declaration": true,
-    "removeComments": true,
-    "allowJs": true,
-    "target": "ES5",
-    "sourceMap": true,
-    "outDir": "./build",
-    "baseUrl": "./",
-    "incremental": true,
-    "esModuleInterop": true,
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": [],
     "strict": true,
-    "lib": [
-      "es2015",
-      "dom"
-    ]
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "isolatedModules": true,
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "leaflet-draw-shapes": ["./src/index.ts"]
+    }
   },
-  "exclude": [
-    "node_modules",
-    "build"
-  ],
-  "include": [
-    "src",
-  ]
+  "include": ["src", "test", "demo", "*.ts"]
 }

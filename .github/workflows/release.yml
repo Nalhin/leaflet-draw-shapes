@@ -1,0 +1,42 @@
+name: Release
+
+# Publishing a GitHub Release tagged `vX.Y.Z` publishes that version to npm.
+# Pre-releases (e.g. `v2.1.0-beta.1`) are published under the `next` dist-tag.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC) + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      - name: Set version from tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag '$TAG' is not of the form vX.Y.Z"
+            exit 1
+          fi
+          npm version "${TAG#v}" --no-git-tag-version
+
+      - run: pnpm check
+
+      - name: Publish
+        env:
+          DIST_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
+        run: npm publish --provenance --access public --tag "$DIST_TAG" --ignore-scripts
