@@ -969,6 +969,65 @@ describe('DrawLayer', () => {
       expect(pane.querySelector('.leaflet-draw-shapes-polygon')).toBeNull();
     });
 
+    it('lets presses through the vertex pane to what is drawn below', () => {
+      const { map, layer } = setup({
+        mode: EDIT,
+        style: { vertex: { interactive: true } },
+      });
+      layer.addPolygon(square(map, 400, 300));
+
+      const pane = map.getPane('drawShapesVertexPane')!;
+      // On a `preferCanvas` map the pane's renderer is a canvas covering the
+      // whole map, so the pane itself must not catch events.
+      expect(pane.style.pointerEvents).toBe('none');
+      for (const marker of vertexMarkers(layer)) {
+        expect(marker.options.interactive).toBe(false);
+        expect(marker.getElement()!.classList).not.toContain(
+          'leaflet-interactive',
+        );
+      }
+    });
+
+    it('shows a pointer cursor over a vertex and restores the previous one', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      const container = map.getContainer();
+      container.style.cursor = 'help';
+
+      pointer('pointermove', corner, container);
+      expect(container.style.cursor).toBe('pointer');
+      pointer('pointermove', new Point(400, 300), container);
+      expect(container.style.cursor).toBe('help');
+
+      pointer('pointermove', corner, container);
+      layer.remove();
+      expect(container.style.cursor).toBe('help');
+    });
+
+    it('keeps the context menu of a vertex from the map', () => {
+      const { map, layer } = setup({ mode: EDIT });
+      layer.addPolygon(square(map, 400, 300));
+      const onContextMenu = vi.fn();
+      map.on('contextmenu', onContextMenu);
+      const contextMenu = (at: Point) => {
+        const event = new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          button: 2,
+          clientX: at.x,
+          clientY: at.y,
+        });
+        map.getContainer().dispatchEvent(event);
+        return event;
+      };
+
+      expect(contextMenu(corner).defaultPrevented).toBe(true);
+      expect(onContextMenu).not.toHaveBeenCalled();
+
+      contextMenu(new Point(100, 100));
+      expect(onContextMenu).toHaveBeenCalledOnce();
+    });
+
     it('leaves the polygon alone when a vertex is clicked without moving', () => {
       const { map, layer, events } = setup({ mode: ALL });
       const [polygon] = layer.addPolygon(square(map, 400, 300));

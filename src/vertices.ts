@@ -6,13 +6,7 @@ import {
   type Polygon,
 } from 'leaflet';
 import { classNames, withClass } from './class-names';
-import {
-  outerRing,
-  polygonsOf,
-  propagationEvents,
-  stopMapPropagation,
-  type DrawContext,
-} from './context';
+import { outerRing, polygonsOf, type DrawContext } from './context';
 import { boundsOf, type Box, type Path } from './geometry/clip';
 import { hasMode, Mode } from './modes';
 import { createPolygons, mergePolygons } from './polygons';
@@ -20,7 +14,8 @@ import type { ResolvedStyle } from './style';
 
 /**
  * The pane vertex handles are drawn in. It sits above `overlayPane`, so
- * polygons added after their handles can't cover them.
+ * polygons added after their handles can't cover them. It never receives
+ * pointer events: handles are hit-tested on the map container instead.
  */
 export const vertexPane = 'drawShapesVertexPane';
 
@@ -70,10 +65,11 @@ export function createVertices(
       pane: vertexPane,
       ...vertexAppearance(context.style, false),
       className: withClass(classNames.vertex, context.style.vertex.className),
-      bubblingMouseEvents: false,
+      // With SVG, Leaflet's stylesheet would give interactive handles pointer
+      // events back despite the pane.
+      interactive: false,
     });
     context.vertexLayer.addLayer(marker);
-    marker.on(propagationEvents, stopMapPropagation);
     return marker;
   });
 }
@@ -116,14 +112,21 @@ export function enableVertexDragging(
   const { layer } = context;
   const container = map.getContainer();
   if (!map.getPane(vertexPane)) {
+    const { style } = map.createPane(vertexPane);
     // Between `overlayPane` (400) and `shadowPane` (500).
-    map.createPane(vertexPane).style.zIndex = '450';
+    style.zIndex = '450';
+    // Leaflet gives the pane its own renderer, which on a `preferCanvas` map
+    // is a canvas covering the whole map. Letting presses through keeps
+    // whatever is drawn below, in any renderer, clickable.
+    style.pointerEvents = 'none';
   }
 
   const projections: ProjectionCache = new WeakMap();
   let hovered: CircleMarker | null = null;
   let endDrag: (() => void) | null = null;
   let releaseClicks: (() => void) | null = null;
+  /** The container's own cursor while a handle shows the pointer. */
+  let cursor: string | null = null;
 
   const editing = () => hasMode(layer.getMode(), Mode.EDIT);
 
@@ -132,9 +135,22 @@ export function enableVertexDragging(
     hovered?.setStyle(vertexAppearance(context.style, false));
     marker?.setStyle(vertexAppearance(context.style, true));
     hovered = marker;
+    showPointer(!!marker);
   };
 
-  const hitTest = (event: PointerEvent): VertexHit | null =>
+  /** The handles can't set the cursor themselves, as they get no events. */
+  const showPointer = (show: boolean): void => {
+    if (show === (cursor !== null)) return;
+    if (show) {
+      cursor = container.style.cursor;
+      container.style.cursor = 'pointer';
+    } else {
+      container.style.cursor = cursor ?? '';
+      cursor = null;
+    }
+  };
+
+  const hitTest = (event: MouseEvent): VertexHit | null =>
     editing() && onMapSurface(map, event.target)
       ? vertexAt(
           context,
@@ -168,6 +184,13 @@ export function enableVertexDragging(
     map.dragging.disable();
     reveal(hit.marker);
     endDrag = startDrag(event, hit);
+  };
+
+  // Like the polygons, handles keep their context menu from the map.
+  const onContextMenu = (event: MouseEvent): void => {
+    if (!hitTest(event)) return;
+    event.stopPropagation();
+    event.preventDefault();
   };
 
   function startDrag(
@@ -265,6 +288,7 @@ export function enableVertexDragging(
   container.addEventListener('pointerdown', onPress, true);
   container.addEventListener('pointermove', onHover);
   container.addEventListener('pointerleave', onLeave);
+  container.addEventListener('contextmenu', onContextMenu, true);
 
   return {
     dispose: () => {
@@ -274,6 +298,7 @@ export function enableVertexDragging(
       container.removeEventListener('pointerdown', onPress, true);
       container.removeEventListener('pointermove', onHover);
       container.removeEventListener('pointerleave', onLeave);
+      container.removeEventListener('contextmenu', onContextMenu, true);
     },
   };
 }
@@ -284,8 +309,9 @@ function vertexAt(
   map: Map,
   projections: ProjectionCache,
   containerPoint: Point,
-  { pointerType }: PointerEvent,
+  event: MouseEvent,
 ): VertexHit | null {
+  const pointerType = event instanceof PointerEvent ? event.pointerType : '';
   const { radius = 0, weight = 0 } = context.style.vertex;
   let nearest = Math.max(
     radius + weight / 2,
